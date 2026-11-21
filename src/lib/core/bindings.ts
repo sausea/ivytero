@@ -497,6 +497,13 @@ export const commands = {
 	plazaScratchClear: () => __TAURI_INVOKE<ApiResult<ScratchClearResult>>("plaza_scratch_clear"),
 	feedsSetPinned: (args: FeedsSetPinnedArgs) => __TAURI_INVOKE<ApiResult<FeedSub>>("feeds_set_pinned", { args }),
 	feedsResolveBody: (args: FeedsIdArgs) => __TAURI_INVOKE<ApiResult<FeedItem>>("feeds_resolve_body", { args }),
+	/**  Cloud RSS source settings. The token is reported as `hasToken` only. */
+	feedsCloudSettingsGet: () => __TAURI_INVOKE<ApiResult<CloudFeedSettings>>("feeds_cloud_settings_get"),
+	feedsCloudSettingsSet: (args: FeedsCloudSettingsSetArgs) => __TAURI_INVOKE<ApiResult<CloudFeedSettings>>("feeds_cloud_settings_set", { args }),
+	feedsCloudTest: (args: FeedsCloudTestArgs) => __TAURI_INVOKE<ApiResult<CloudFeedInfo>>("feeds_cloud_test", { args }),
+	feedsCloudList: () => __TAURI_INVOKE<ApiResult<FeedList>>("feeds_cloud_list"),
+	feedsCloudItems: (args: FeedsCloudItemsArgs) => __TAURI_INVOKE<ApiResult<CloudFeedItemsPage>>("feeds_cloud_items", { args }),
+	feedsCloudItem: (args: FeedsIdArgs) => __TAURI_INVOKE<ApiResult<FeedItem>>("feeds_cloud_item", { args }),
 	/**
 	 *  Rank today's arXiv papers against the Vault library.
 	 * 
@@ -2765,6 +2772,23 @@ export type CliInstallStatus = {
 	message: string | null,
 };
 
+export type CloudFeedInfo = {
+	apiVersion: number,
+	serverId: string,
+};
+
+export type CloudFeedItemsPage = {
+	items: FeedItem[],
+	nextCursor: string | null,
+};
+
+/**  What the WebView may see: whether a token exists, never the token. */
+export type CloudFeedSettings = {
+	source: FeedSource,
+	baseUrl: string,
+	hasToken: boolean,
+};
+
 export type CommitStatus = 
 /**  New paper folder + catalog row were written. */
 "created" | 
@@ -3349,6 +3373,8 @@ export type FeedRefreshResult = {
 	failed: number,
 };
 
+export type FeedSource = "local" | "cloud";
+
 export type FeedSub = {
 	id: string,
 	url: string,
@@ -3371,6 +3397,25 @@ export type FeedbackSubmitArgs = {
 export type FeedsAddArgs = {
 	url: string,
 	title?: string | null,
+};
+
+export type FeedsCloudItemsArgs = {
+	feedId?: string | null,
+	cursor?: string | null,
+	limit?: number | null,
+};
+
+export type FeedsCloudSettingsSetArgs = {
+	source: FeedSource,
+	baseUrl: string,
+	/**  `null` keeps the saved token; `""` clears it. */
+	token?: string | null,
+};
+
+export type FeedsCloudTestArgs = {
+	baseUrl: string,
+	/**  `null` tests with the saved token. */
+	token?: string | null,
 };
 
 export type FeedsIdArgs = {

@@ -2,7 +2,13 @@
  * Plaza feed subscriptions — Host IPC + paper import.
  */
 
-import { commands, type FeedItem, type FeedSub } from "@/lib/core/bindings";
+import {
+	type CloudFeedSettings,
+	commands,
+	type FeedItem,
+	type FeedSource,
+	type FeedSub,
+} from "@/lib/core/bindings";
 import { errorText } from "@/lib/core/error";
 import { callApi } from "@/lib/core/ipc";
 import { notifyError } from "@/lib/core/notify";
@@ -411,6 +417,12 @@ const FEED_ERROR_KEYS = {
 	http: "plaza.feeds.errors.http",
 	fetch: "plaza.feeds.errors.fetch",
 	body: "plaza.feeds.errors.body",
+	cloud_invalid_url: "plaza.feeds.errors.cloud_invalid_url",
+	cloud_not_configured: "plaza.feeds.errors.cloud_not_configured",
+	cloud_unauthorized: "plaza.feeds.errors.cloud_unauthorized",
+	cloud_unreachable: "plaza.feeds.errors.cloud_unreachable",
+	cloud_http: "plaza.feeds.errors.cloud_http",
+	cloud_protocol: "plaza.feeds.errors.cloud_protocol",
 	// Operation-level codes: used when the Host error carries no message.
 	listFailed: "plaza.feeds.errors.opFailed",
 	addFailed: "plaza.feeds.errors.opFailed",
@@ -421,6 +433,7 @@ const FEED_ERROR_KEYS = {
 	markFailed: "plaza.feeds.errors.opFailed",
 	pinFailed: "plaza.feeds.errors.opFailed",
 	resolveFailed: "plaza.feeds.errors.opFailed",
+	cloudFailed: "plaza.feeds.errors.opFailed",
 } as const;
 
 export type FeedErrorKey =
@@ -441,5 +454,76 @@ export async function feedsSetRead(
 ): Promise<FeedItem> {
 	return callApi(() => commands.feedsSetRead({ id, read }), {
 		fallback: "feeds.markFailed",
+	});
+}
+
+/**
+ * Cloud RSS source (read-only `/api/v1`). The Host keeps the token; the
+ * WebView only sees `hasToken`. Cloud rows reuse the {@link FeedItem} shape
+ * with no reader state, and never go through local `feeds.sqlite` commands.
+ */
+export type { CloudFeedSettings, FeedSource } from "@/lib/core/bindings";
+
+export const CLOUD_PAGE_SIZE = 50;
+
+export async function feedsCloudSettingsGet(): Promise<CloudFeedSettings> {
+	return callApi(() => commands.feedsCloudSettingsGet(), {
+		fallback: "feeds.cloudFailed",
+	});
+}
+
+export async function feedsCloudSettingsSet(args: {
+	source: FeedSource;
+	baseUrl: string;
+	/** `undefined` keeps the saved token; `""` clears it. */
+	token?: string;
+}): Promise<CloudFeedSettings> {
+	return callApi(
+		() =>
+			commands.feedsCloudSettingsSet({
+				source: args.source,
+				baseUrl: args.baseUrl,
+				token: args.token ?? null,
+			}),
+		{ fallback: "feeds.cloudFailed" },
+	);
+}
+
+export async function feedsCloudTest(
+	baseUrl: string,
+	token?: string,
+): Promise<{ apiVersion: number; serverId: string }> {
+	return callApi(
+		() => commands.feedsCloudTest({ baseUrl, token: token || null }),
+		{ fallback: "feeds.cloudFailed" },
+	);
+}
+
+export async function feedsCloudList(): Promise<FeedSub[]> {
+	const data = await callApi(() => commands.feedsCloudList(), {
+		fallback: "feeds.cloudFailed",
+	});
+	return data.subscriptions;
+}
+
+export async function feedsCloudItems(opts: {
+	feedId?: string;
+	cursor?: string | null;
+	limit?: number;
+}): Promise<{ items: FeedItem[]; nextCursor: string | null }> {
+	return callApi(
+		() =>
+			commands.feedsCloudItems({
+				feedId: opts.feedId ?? null,
+				cursor: opts.cursor ?? null,
+				limit: opts.limit ?? CLOUD_PAGE_SIZE,
+			}),
+		{ fallback: "feeds.cloudFailed" },
+	);
+}
+
+export async function feedsCloudItem(id: string): Promise<FeedItem> {
+	return callApi(() => commands.feedsCloudItem({ id }), {
+		fallback: "feeds.cloudFailed",
 	});
 }

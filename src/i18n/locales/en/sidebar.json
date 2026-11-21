@@ -342,7 +342,13 @@
 				"http": "The feed server returned an error.",
 				"fetch": "Could not fetch this feed.",
 				"body": "Could not read the feed body.",
-				"opFailed": "The feed operation failed."
+				"opFailed": "The feed operation failed.",
+				"cloud_invalid_url": "Use an https:// server URL (http only for localhost).",
+				"cloud_not_configured": "Set the cloud server URL and read token first.",
+				"cloud_unauthorized": "The cloud server rejected the read token.",
+				"cloud_unreachable": "Could not reach the cloud RSS server.",
+				"cloud_http": "The cloud RSS server returned an error.",
+				"cloud_protocol": "The cloud RSS server sent an unexpected response."
 			},
 			"hideRead": "Hide read items",
 			"hideReadShort": "Hide read",
@@ -350,7 +356,17 @@
 			"read": "Read",
 			"unread": "Unread",
 			"markRead": "Mark as read",
-			"markUnread": "Mark as unread"
+			"markUnread": "Mark as unread",
+			"source": "Feed source",
+			"sourceLocal": "Local",
+			"sourceCloud": "Cloud",
+			"cloudSettings": "Cloud RSS server",
+			"cloudUrl": "Server URL",
+			"cloudToken": "Read token",
+			"cloudTokenSaved": "Saved (leave blank to keep)",
+			"cloudTest": "Test connection",
+			"cloudConnected": "Connected",
+			"cloudHint": "Read-only. Read marks and imports stay on this device."
 		},
 		"skills": {
 			"title": "Skill picks",

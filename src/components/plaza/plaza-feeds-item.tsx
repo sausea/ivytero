@@ -53,7 +53,8 @@ export function PlazaFeedItemRow({
 	item: FeedItem;
 	hideSource: boolean;
 	onOpen: (item: FeedItem) => void;
-	onToggleRead: (item: FeedItem) => void;
+	/** Omitted for cloud rows: read state is not tracked there yet. */
+	onToggleRead?: (item: FeedItem) => void;
 	onImport: (item: FeedItem) => void;
 	importing: boolean;
 }) {
@@ -132,7 +133,9 @@ export function PlazaFeedItemRow({
 						) : null}
 					</button>
 					<div className="flex shrink-0 flex-col items-center gap-0.5">
-						<FeedReadButton item={item} onClick={() => onToggleRead(item)} />
+						{onToggleRead ? (
+							<FeedReadButton item={item} onClick={() => onToggleRead(item)} />
+						) : null}
 						{href ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -187,6 +190,7 @@ export function PlazaFeedItemDetail({
 	importing,
 	onResolved,
 	onToggleRead,
+	resolveBody = feedsResolveBody,
 }: {
 	item: FeedItem;
 	hideSource: boolean;
@@ -194,7 +198,9 @@ export function PlazaFeedItemDetail({
 	onImport: (item: FeedItem) => void;
 	importing: boolean;
 	onResolved: (next: FeedItem) => void;
-	onToggleRead: () => void;
+	onToggleRead?: () => void;
+	/** Body loader; cloud items must not hit the local `feeds.sqlite` resolver. */
+	resolveBody?: (id: string) => Promise<FeedItem>;
 }) {
 	const { t, i18n } = useTranslation("sidebar");
 	const [resolving, setResolving] = useState(!item.bodyMarkdown);
@@ -211,7 +217,7 @@ export function PlazaFeedItemDetail({
 		}
 		let cancelled = false;
 		setResolving(true);
-		void feedsResolveBody(item.id)
+		void resolveBody(item.id)
 			.then((next) => {
 				if (!cancelled) onResolved(next);
 			})
@@ -224,7 +230,7 @@ export function PlazaFeedItemDetail({
 		return () => {
 			cancelled = true;
 		};
-	}, [item.bodyMarkdown, item.id, onResolved]);
+	}, [item.bodyMarkdown, item.id, onResolved, resolveBody]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -266,7 +272,9 @@ export function PlazaFeedItemDetail({
 						</Tooltip>
 					) : null}
 				</div>
-				<FeedReadButton item={item} onClick={onToggleRead} />
+				{onToggleRead ? (
+					<FeedReadButton item={item} onClick={onToggleRead} />
+				) : null}
 				{resolving ? (
 					<Loader2
 						className="size-3.5 shrink-0 animate-spin text-muted-foreground"

@@ -3,6 +3,7 @@
 //! Stored in `$XDG_DATA_HOME/agentero/feeds.sqlite`. Does not write catalog or Vault.
 
 pub mod body;
+pub mod cloud;
 pub mod parse;
 mod schema;
 

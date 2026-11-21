@@ -341,7 +341,13 @@
 				"http": "源站返回了错误。",
 				"fetch": "拉源失败。",
 				"body": "无法读取 Feed 内容。",
-				"opFailed": "订阅源操作失败。"
+				"opFailed": "订阅源操作失败。",
+				"cloud_invalid_url": "请使用 https:// 服务地址（仅 localhost 可用 http）。",
+				"cloud_not_configured": "请先填写云端服务地址和只读 Token。",
+				"cloud_unauthorized": "云端服务拒绝了该只读 Token。",
+				"cloud_unreachable": "无法连接云端 RSS 服务。",
+				"cloud_http": "云端 RSS 服务返回错误。",
+				"cloud_protocol": "云端 RSS 服务返回了无法识别的响应。"
 			},
 			"hideRead": "隐藏已读",
 			"hideReadShort": "隐藏已读",
@@ -349,7 +355,17 @@
 			"read": "已读",
 			"unread": "未读",
 			"markRead": "标记为已读",
-			"markUnread": "标记为未读"
+			"markUnread": "标记为未读",
+			"source": "订阅来源",
+			"sourceLocal": "本地",
+			"sourceCloud": "云端",
+			"cloudSettings": "云端 RSS 服务",
+			"cloudUrl": "服务地址",
+			"cloudToken": "只读 Token",
+			"cloudTokenSaved": "已保存（留空则保持不变）",
+			"cloudTest": "测试连接",
+			"cloudConnected": "已连接",
+			"cloudHint": "只读。已读标记和导入记录只保存在本机。"
 		},
 		"skills": {
 			"title": "Skill 推荐",

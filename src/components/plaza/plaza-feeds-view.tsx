@@ -5,6 +5,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TFunction } from "i18next";
 import {
+	Cloud,
 	EllipsisVertical,
 	EyeOff,
 	Inbox,
@@ -40,15 +41,23 @@ import {
 } from "@/components/ui/tooltip";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import {
 	ARXIV_FEED_CHIPS,
 	arxivFeedUrl,
+	type CloudFeedSettings,
 	compareFeedSubs,
 	type FeedItem,
+	type FeedSource,
 	type FeedSub,
 	feedsAdd,
+	feedsCloudItem,
+	feedsCloudItems,
+	feedsCloudList,
+	feedsCloudSettingsGet,
+	feedsCloudSettingsSet,
+	feedsCloudTest,
 	feedsItems,
 	feedsList,
 	feedsMarkImported,
@@ -266,6 +275,133 @@ function AddForm({
 	);
 }
 
+function CloudSourceDialog({
+	open,
+	settings,
+	onOpenChange,
+	onSaved,
+}: {
+	open: boolean;
+	settings: CloudFeedSettings | null;
+	onOpenChange: (open: boolean) => void;
+	onSaved: (next: CloudFeedSettings) => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const [source, setSource] = useState<FeedSource>("local");
+	const [baseUrl, setBaseUrl] = useState("");
+	const [token, setToken] = useState("");
+	const [busy, setBusy] = useState(false);
+
+	useEffect(() => {
+		if (!open) return;
+		setSource(settings?.source ?? "local");
+		setBaseUrl(settings?.baseUrl ?? "");
+		setToken("");
+	}, [open, settings]);
+
+	const run = async (action: () => Promise<void>) => {
+		setBusy(true);
+		try {
+			await action();
+		} catch (error) {
+			toastHostError(errorText(error), t);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="max-w-sm">
+				<DialogHeader>
+					<DialogTitle>{t("plaza.feeds.cloudSettings")}</DialogTitle>
+				</DialogHeader>
+				<div className="space-y-3">
+					<div
+						role="radiogroup"
+						aria-label={t("plaza.feeds.source")}
+						className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-0.5"
+					>
+						{(["local", "cloud"] as const).map((value) => (
+							<Button
+								key={value}
+								type="button"
+								role="radio"
+								aria-checked={source === value}
+								variant="ghost"
+								size="sm"
+								className={cn(source === value && "bg-background shadow-sm")}
+								onClick={() => setSource(value)}
+							>
+								{t(
+									value === "local"
+										? "plaza.feeds.sourceLocal"
+										: "plaza.feeds.sourceCloud",
+								)}
+							</Button>
+						))}
+					</div>
+					<Input
+						value={baseUrl}
+						onChange={(event) => setBaseUrl(event.target.value)}
+						placeholder="https://rss.example.org"
+						aria-label={t("plaza.feeds.cloudUrl")}
+						disabled={busy}
+					/>
+					<Input
+						type="password"
+						autoComplete="off"
+						value={token}
+						onChange={(event) => setToken(event.target.value)}
+						placeholder={
+							settings?.hasToken
+								? t("plaza.feeds.cloudTokenSaved")
+								: t("plaza.feeds.cloudToken")
+						}
+						aria-label={t("plaza.feeds.cloudToken")}
+						disabled={busy}
+					/>
+					<p className="text-muted-foreground text-xs leading-relaxed">
+						{t("plaza.feeds.cloudHint")}
+					</p>
+				</div>
+				<DialogFooter>
+					<Button
+						type="button"
+						variant="ghost"
+						disabled={busy || !baseUrl.trim()}
+						onClick={() =>
+							void run(async () => {
+								await feedsCloudTest(baseUrl, token.trim() || undefined);
+								notifySuccess(t("plaza.feeds.cloudConnected"));
+							})
+						}
+					>
+						{t("plaza.feeds.cloudTest")}
+					</Button>
+					<Button
+						type="button"
+						disabled={busy}
+						onClick={() =>
+							void run(async () => {
+								const next = await feedsCloudSettingsSet({
+									source,
+									baseUrl,
+									token: token.trim() || undefined,
+								});
+								onSaved(next);
+								onOpenChange(false);
+							})
+						}
+					>
+						{t("plaza.feeds.save")}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
 export function PlazaFeedsView({ className }: { className?: string }) {
 	const { t } = useTranslation("sidebar");
 	const [subs, setSubs] = useState<FeedSub[]>([]);
@@ -291,12 +427,43 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [subMenu, setSubMenu] = useState<FeedSubMenuState | null>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const closeSubMenu = useCallback(() => setSubMenu(null), []);
+	const [cloudSettings, setCloudSettings] = useState<CloudFeedSettings | null>(
+		null,
+	);
+	const [cloudDialogOpen, setCloudDialogOpen] = useState(false);
+	const source: FeedSource | null = cloudSettings?.source ?? null;
+	const cloud = source === "cloud";
+	const cloudRef = useRef(cloud);
+	cloudRef.current = cloud;
+	const nextCursorRef = useRef<string | null>(null);
+	const [hasMore, setHasMore] = useState(false);
+	const loadingMore = useRef(false);
+
+	useEffect(() => {
+		void feedsCloudSettingsGet()
+			.then(setCloudSettings)
+			.catch(() =>
+				setCloudSettings({ source: "local", baseUrl: "", hasToken: false }),
+			);
+	}, []);
 
 	const loadItems = useCallback(
 		async (subscriptionId: string | null, closeDetail = true) => {
 			const request = ++itemsRequest.current;
 			if (closeDetail) setOpenItem(null);
 			try {
+				if (cloudRef.current) {
+					const page = await feedsCloudItems({
+						feedId: subscriptionId ?? undefined,
+					});
+					if (request !== itemsRequest.current) return;
+					nextCursorRef.current = page.nextCursor;
+					setHasMore(page.nextCursor !== null);
+					setItems(page.items);
+					return;
+				}
+				nextCursorRef.current = null;
+				setHasMore(false);
 				const rows = await feedsItems({
 					subscriptionId: subscriptionId ?? undefined,
 					filter: hideReadRef.current ? "unread" : "all",
@@ -312,12 +479,43 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const selectedIdRef = useRef(selectedId);
 	selectedIdRef.current = selectedId;
 
+	/** Next cloud page by cursor; appends, never refetches what is loaded. */
+	const loadMore = useCallback(async () => {
+		const cursor = nextCursorRef.current;
+		if (!cloudRef.current || !cursor || loadingMore.current) return;
+		loadingMore.current = true;
+		const request = itemsRequest.current;
+		try {
+			const page = await feedsCloudItems({
+				feedId: selectedIdRef.current ?? undefined,
+				cursor,
+			});
+			if (request !== itemsRequest.current) return;
+			nextCursorRef.current = page.nextCursor;
+			setHasMore(page.nextCursor !== null);
+			setItems((prev) => {
+				const seen = new Set(prev.map((row) => row.id));
+				return [...prev, ...page.items.filter((row) => !seen.has(row.id))];
+			});
+		} catch (error) {
+			toastHostError(errorText(error), t);
+		} finally {
+			loadingMore.current = false;
+		}
+	}, [t]);
+
 	useEffect(() => {
+		if (source === null) return;
 		let cancelled = false;
 		void (async () => {
 			setLoading(true);
+			setSubs([]);
+			setItems([]);
+			setSelectedId(null);
+			selectedIdRef.current = null;
 			try {
-				const next = await feedsList();
+				const next =
+					source === "cloud" ? await feedsCloudList() : await feedsList();
 				if (cancelled) return;
 				setSubs([...next].sort(compareFeedSubs));
 				await loadItems(selectedIdRef.current, false);
@@ -332,9 +530,11 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [loadItems, t]);
+	}, [loadItems, source, t]);
 
 	useEffect(() => {
+		// The cloud server polls on its own; never touch local feeds there.
+		if (source !== "local") return;
 		let cancelled = false;
 		const runStale = async () => {
 			try {
@@ -352,7 +552,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [loadItems]);
+	}, [loadItems, source]);
 
 	const onAdd = useCallback(
 		async (url: string) => {
@@ -378,6 +578,11 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const onRefresh = useCallback(async () => {
 		setRefreshing(true);
 		try {
+			if (cloudRef.current) {
+				setSubs(await feedsCloudList());
+				await loadItems(selectedId);
+				return;
+			}
 			const result = await feedsRefresh({
 				id: selectedId ?? undefined,
 			});
@@ -434,7 +639,11 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			setImportingIds(new Set(importPending.current));
 			try {
 				if (await importFeedItem(item)) {
-					applyItem(await feedsMarkImported(item.id));
+					applyItem(
+						cloudRef.current
+							? { ...item, importedAt: new Date().toISOString() }
+							: await feedsMarkImported(item.id),
+					);
 				}
 			} catch (error) {
 				toastHostError(errorText(error), t);
@@ -474,7 +683,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const openFeedItem = useCallback(
 		(item: FeedItem) => {
 			setOpenItem(item);
-			if (!item.readAt) void setRead(item, true);
+			if (!cloudRef.current && !item.readAt) void setRead(item, true);
 		},
 		[setRead],
 	);
@@ -492,7 +701,11 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				return;
 			}
 			try {
-				openFeedItem(await feedsResolveBody(feedId));
+				openFeedItem(
+					await (cloudRef.current
+						? feedsCloudItem(feedId)
+						: feedsResolveBody(feedId)),
+				);
 			} catch {
 				// Opening is best-effort; the Plaza tab still shows the list.
 			}
@@ -548,6 +761,36 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		overscan: 8,
 	});
 
+	const virtualRows = virtualizer.getVirtualItems();
+	const lastVirtualIndex = virtualRows[virtualRows.length - 1]?.index ?? -1;
+	useEffect(() => {
+		if (hasMore && lastVirtualIndex >= visibleItems.length - 8) {
+			void loadMore();
+		}
+	}, [hasMore, lastVirtualIndex, loadMore, visibleItems.length]);
+
+	const cloudButton = (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={t("plaza.feeds.cloudSettings")}
+					aria-pressed={cloud}
+					className={cn(
+						"shrink-0 bg-foreground/5 hover:bg-foreground/10",
+						cloud && "bg-foreground/10 text-foreground",
+					)}
+					onClick={() => setCloudDialogOpen(true)}
+				>
+					<Cloud className="size-3.5" aria-hidden />
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent>{t("plaza.feeds.cloudSettings")}</TooltipContent>
+		</Tooltip>
+	);
+
 	const selected = selectedId
 		? (subs.find((row) => row.id === selectedId) ?? null)
 		: null;
@@ -556,7 +799,17 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col", className)}>
-			{!hasSubs ? (
+			{!hasSubs && (loading || source === null) ? (
+				<div className="flex-1" />
+			) : !hasSubs && cloud ? (
+				<div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+					<Cloud className="size-5 text-muted-foreground/60" aria-hidden />
+					<p className="text-muted-foreground text-sm">
+						{t("plaza.feeds.emptyItems")}
+					</p>
+					{cloudButton}
+				</div>
+			) : !hasSubs ? (
 				<div className="flex flex-1 flex-col items-center justify-center p-6">
 					<div className="w-full max-w-md space-y-4 animate-in fade-in-0 duration-200">
 						<div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground">
@@ -576,25 +829,28 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 						<p className="text-center text-muted-foreground text-xs leading-relaxed">
 							{t("plaza.feeds.emptyHint")}
 						</p>
+						<div className="flex justify-center">{cloudButton}</div>
 					</div>
 				</div>
 			) : (
 				<div className="flex min-h-0 min-w-0 flex-1">
 					<nav className="flex w-52 shrink-0 select-none flex-col gap-2 bg-muted/50 p-2">
-						<AddForm
-							busy={busy}
-							refreshing={refreshing}
-							onAdd={(url) => void onAdd(url)}
-							onRefresh={() => void onRefresh()}
-							showRefresh={false}
-							showChips={false}
-						/>
-						<div className="grid shrink-0 grid-cols-2 gap-1.5">
+						{cloud ? null : (
+							<AddForm
+								busy={busy}
+								refreshing={refreshing}
+								onAdd={(url) => void onAdd(url)}
+								onRefresh={() => void onRefresh()}
+								showRefresh={false}
+								showChips={false}
+							/>
+						)}
+						<div className="flex shrink-0 items-center gap-1.5">
 							<Button
 								type="button"
 								variant="ghost"
 								size="sm"
-								className="w-full min-w-0 bg-foreground/5 hover:bg-foreground/10"
+								className="min-w-0 flex-1 bg-foreground/5 hover:bg-foreground/10"
 								disabled={refreshing}
 								onClick={() => void onRefresh()}
 							>
@@ -607,26 +863,29 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									{t("plaza.feeds.refresh")}
 								</span>
 							</Button>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								aria-pressed={hideRead}
-								className={cn(
-									"w-full min-w-0 bg-foreground/5 hover:bg-foreground/10",
-									hideRead && "bg-foreground/10 text-foreground",
-								)}
-								onClick={() => {
-									hideReadRef.current = !hideRead;
-									setHideRead(!hideRead);
-									void loadItems(selectedId, false);
-								}}
-							>
-								<EyeOff data-icon="inline-start" aria-hidden />
-								<span className="min-w-0 truncate">
-									{t("plaza.feeds.hideReadShort")}
-								</span>
-							</Button>
+							{cloud ? null : (
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									aria-pressed={hideRead}
+									className={cn(
+										"min-w-0 flex-1 bg-foreground/5 hover:bg-foreground/10",
+										hideRead && "bg-foreground/10 text-foreground",
+									)}
+									onClick={() => {
+										hideReadRef.current = !hideRead;
+										setHideRead(!hideRead);
+										void loadItems(selectedId, false);
+									}}
+								>
+									<EyeOff data-icon="inline-start" aria-hidden />
+									<span className="min-w-0 truncate">
+										{t("plaza.feeds.hideReadShort")}
+									</span>
+								</Button>
+							)}
+							{cloudButton}
 						</div>
 						<div className="agentero-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto">
 							<button
@@ -654,9 +913,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											setSelectedId(sub.id);
 											void loadItems(sub.id);
 										}}
-										onContextMenu={(event) =>
-											openFeedSubMenu(sub, event, setSubMenu)
-										}
+										onContextMenu={(event) => {
+											if (cloud) return;
+											openFeedSubMenu(sub, event, setSubMenu);
+										}}
 										className={cn(
 											"flex w-full flex-col rounded-lg py-1.5 pr-7 pl-2.5 text-left",
 											"transition-colors duration-150 ease-out",
@@ -681,24 +941,27 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											</span>
 										) : null}
 									</button>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-sm"
-										className="absolute top-0 right-0.5 bottom-0 my-auto size-6 opacity-0 transition-opacity duration-150 group-hover/feed:opacity-100 focus-visible:opacity-100"
-										aria-label={t("plaza.feeds.more")}
-										onClick={(event) => {
-											event.stopPropagation();
-											const rect = event.currentTarget.getBoundingClientRect();
-											setSubMenu({
-												sub,
-												x: rect.right,
-												y: rect.bottom,
-											});
-										}}
-									>
-										<EllipsisVertical className="size-3.5" aria-hidden />
-									</Button>
+									{cloud ? null : (
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-sm"
+											className="absolute top-0 right-0.5 bottom-0 my-auto size-6 opacity-0 transition-opacity duration-150 group-hover/feed:opacity-100 focus-visible:opacity-100"
+											aria-label={t("plaza.feeds.more")}
+											onClick={(event) => {
+												event.stopPropagation();
+												const rect =
+													event.currentTarget.getBoundingClientRect();
+												setSubMenu({
+													sub,
+													x: rect.right,
+													y: rect.bottom,
+												});
+											}}
+										>
+											<EllipsisVertical className="size-3.5" aria-hidden />
+										</Button>
+									)}
 								</div>
 							))}
 						</div>
@@ -712,10 +975,15 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									setOpenItem(null);
 									if (hideRead) void loadItems(selectedId);
 								}}
-								onToggleRead={() => void setRead(openItem, !openItem.readAt)}
+								onToggleRead={
+									cloud
+										? undefined
+										: () => void setRead(openItem, !openItem.readAt)
+								}
 								onImport={(item) => void importItem(item)}
 								importing={importingIds.has(openItem.id)}
 								onResolved={applyItem}
+								resolveBody={cloud ? feedsCloudItem : undefined}
 							/>
 						) : emptyItems ? (
 							<div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -742,7 +1010,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									className="relative w-full"
 									style={{ height: virtualizer.getTotalSize() }}
 								>
-									{virtualizer.getVirtualItems().map((virtualRow) => {
+									{virtualRows.map((virtualRow) => {
 										const item = visibleItems[virtualRow.index];
 										return (
 											<div
@@ -760,8 +1028,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 													onOpen={openFeedItem}
 													onImport={(item) => void importItem(item)}
 													importing={importingIds.has(item.id)}
-													onToggleRead={(item) =>
-														void setRead(item, !item.readAt)
+													onToggleRead={
+														cloud
+															? undefined
+															: (item) => void setRead(item, !item.readAt)
 													}
 												/>
 											</div>
@@ -797,6 +1067,13 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					onRemove={(sub) => void onRemove(sub.id)}
 				/>
 			) : null}
+
+			<CloudSourceDialog
+				open={cloudDialogOpen}
+				settings={cloudSettings}
+				onOpenChange={setCloudDialogOpen}
+				onSaved={setCloudSettings}
+			/>
 
 			<Dialog
 				open={renameTarget !== null}

@@ -163,3 +163,92 @@ pub async fn feeds_set_read(args: FeedsSetReadArgs) -> ApiResult<FeedItem> {
         Err(e) => map_err(e),
     }
 }
+
+use super::cloud::{self, CloudFeedInfo, CloudFeedItemsPage, CloudFeedSettings, FeedSource};
+
+/// Cloud RSS source settings. The token is reported as `hasToken` only.
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_settings_get() -> ApiResult<CloudFeedSettings> {
+    match cloud::settings() {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedsCloudSettingsSetArgs {
+    pub source: FeedSource,
+    pub base_url: String,
+    /// `null` keeps the saved token; `""` clears it.
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_settings_set(
+    args: FeedsCloudSettingsSetArgs,
+) -> ApiResult<CloudFeedSettings> {
+    match cloud::save_settings(args.source, &args.base_url, args.token.as_deref()) {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedsCloudTestArgs {
+    pub base_url: String,
+    /// `null` tests with the saved token.
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_test(args: FeedsCloudTestArgs) -> ApiResult<CloudFeedInfo> {
+    match cloud::test_connection(&args.base_url, args.token.as_deref()).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_list() -> ApiResult<FeedList> {
+    match cloud::feeds().await {
+        Ok(subscriptions) => ApiResult::ok(FeedList { subscriptions }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedsCloudItemsArgs {
+    #[serde(default)]
+    pub feed_id: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_items(args: FeedsCloudItemsArgs) -> ApiResult<CloudFeedItemsPage> {
+    match cloud::items(args.feed_id.as_deref(), args.cursor.as_deref(), args.limit).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_item(args: FeedsIdArgs) -> ApiResult<FeedItem> {
+    match cloud::item(&args.id).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
