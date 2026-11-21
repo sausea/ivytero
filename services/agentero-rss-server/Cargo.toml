@@ -1,0 +1,39 @@
+[package]
+name = "agentero-rss-server"
+version = "0.1.0"
+edition = "2021"
+description = "Read-only cloud RSS archive for Agentero: polls feeds, keeps full history, serves a REST API"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "agentero-rss-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "agentero-rss-admin"
+path = "src/bin/rss-admin.rs"
+
+[dependencies]
+# Feed parsing reuses the desktop parser (`features::paper::discovery::feeds::parse`).
+agentero-core = { path = "../../crates/agentero-core" }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { version = "1", features = ["v4", "v7"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+sha2 = "0.11.0"
+hex = "0.4.3"
+base64 = "0.22"
+url = "2"
+clap = { version = "4", features = ["derive"] }
+log = { workspace = true }
+env_logger = "0.11"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

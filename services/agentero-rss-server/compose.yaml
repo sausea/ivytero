@@ -1,0 +1,17 @@
+# RSS_READ_TOKEN comes from .env next to this file (never commit it).
+# Put TLS in front (Caddy / Nginx); the port binds to loopback only.
+services:
+  rss:
+    build:
+      context: ../..
+      dockerfile: services/agentero-rss-server/Dockerfile
+    restart: unless-stopped
+    environment:
+      RSS_READ_TOKEN: ${RSS_READ_TOKEN:?set RSS_READ_TOKEN in .env}
+      RUST_LOG: info
+    volumes:
+      - rss-data:/data
+    ports:
+      - "127.0.0.1:8787:8787"
+volumes:
+  rss-data:
