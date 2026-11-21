@@ -509,6 +509,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		let cancelled = false;
 		void (async () => {
 			setLoading(true);
+			itemsRequest.current++;
+			setOpenItem(null);
 			setSubs([]);
 			setItems([]);
 			setSelectedId(null);
