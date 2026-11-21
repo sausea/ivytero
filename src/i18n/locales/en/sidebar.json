@@ -348,7 +348,12 @@
 				"cloud_unauthorized": "The cloud server rejected the read token.",
 				"cloud_unreachable": "Could not reach the cloud RSS server.",
 				"cloud_http": "The cloud RSS server returned an error.",
-				"cloud_protocol": "The cloud RSS server sent an unexpected response."
+				"cloud_protocol": "The cloud RSS server sent an unexpected response.",
+				"bookmark_no_vault": "Open a vault before bookmarking.",
+				"bookmark_tags": "Add 1–20 tags, each up to 40 characters.",
+				"bookmark_invalid": "This item cannot be bookmarked.",
+				"bookmark_missing": "This bookmark no longer exists.",
+				"bookmark_conflict": "The daily note kept changing. Try again."
 			},
 			"hideRead": "Hide read items",
 			"hideReadShort": "Hide read",
@@ -366,7 +371,19 @@
 			"cloudTokenSaved": "Saved (leave blank to keep)",
 			"cloudTest": "Test connection",
 			"cloudConnected": "Connected",
-			"cloudHint": "Read-only. Read marks and imports stay on this device."
+			"cloudHint": "Read-only. Read marks and imports stay on this device.",
+			"star": "Bookmark to vault",
+			"starred": "Bookmarked",
+			"starredOnly": "Starred",
+			"emptyStarred": "No bookmarked items.",
+			"bookmarkTags": "Tags",
+			"bookmarkTagsPlaceholder": "Type a tag and press Enter",
+			"bookmarkTarget": "{{vault}} / {{path}}",
+			"bookmarkConfirm": "Bookmark",
+			"bookmarkSaved": "Saved to {{path}}",
+			"bookmarkOpen": "Open note",
+			"bookmarkRemove": "Remove",
+			"bookmarkRemoveConfirm": "Confirm removal"
 		},
 		"skills": {
 			"title": "Skill picks",

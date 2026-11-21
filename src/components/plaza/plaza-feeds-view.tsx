@@ -13,9 +13,11 @@ import {
 	Plus,
 	RefreshCw,
 	Rss,
+	Star,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PlazaFeedBookmarkDialog } from "@/components/plaza/plaza-feeds-bookmark-dialog";
 import {
 	PlazaFeedItemDetail,
 	PlazaFeedItemRow,
@@ -39,6 +41,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useVaultStore } from "@/hooks/use-app-stores";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { errorText } from "@/lib/core/error";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
@@ -74,6 +77,15 @@ import {
 	subscribeFeedDetail,
 	takePendingFeedDetailId,
 } from "@/lib/plaza/mention-open";
+import {
+	bookmarkToFeedItem,
+	type RssBookmark,
+	rssDailyBookmark,
+	rssDailyList,
+	rssDailyRemove,
+	rssDailyStatuses,
+} from "@/lib/plaza/rss-bookmarks";
+import { openVaultRel } from "@/lib/workspace/viewer-actions";
 
 const STALE_REFRESH_MS = 15 * 60 * 1000;
 
@@ -405,6 +417,8 @@ function CloudSourceDialog({
 export function PlazaFeedsView({ className }: { className?: string }) {
 	const { t } = useTranslation("sidebar");
 	const [subs, setSubs] = useState<FeedSub[]>([]);
+	const subsRef = useRef(subs);
+	subsRef.current = subs;
 	const [hideRead, setHideRead] = useState(false);
 	const hideReadRef = useRef(hideRead);
 	hideReadRef.current = hideRead;
@@ -438,6 +452,16 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const nextCursorRef = useRef<string | null>(null);
 	const [hasMore, setHasMore] = useState(false);
 	const loadingMore = useRef(false);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const vaultPathRef = useRef(vaultPath);
+	vaultPathRef.current = vaultPath;
+	const [starredOnly, setStarredOnly] = useState(false);
+	const starredOnlyRef = useRef(starredOnly);
+	starredOnlyRef.current = starredOnly;
+	const [bookmarks, setBookmarks] = useState<Map<string, RssBookmark>>(
+		() => new Map(),
+	);
+	const [bookmarkTarget, setBookmarkTarget] = useState<FeedItem | null>(null);
 
 	useEffect(() => {
 		void feedsCloudSettingsGet()
@@ -452,6 +476,25 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			const request = ++itemsRequest.current;
 			if (closeDetail) setOpenItem(null);
 			try {
+				if (starredOnlyRef.current) {
+					nextCursorRef.current = null;
+					setHasMore(false);
+					const vault = vaultPathRef.current;
+					const rows = vault
+						? await rssDailyList(vault, cloudRef.current ? "cloud" : "local")
+						: [];
+					if (request !== itemsRequest.current) return;
+					const subTitle = subscriptionId
+						? subsRef.current.find((row) => row.id === subscriptionId)?.title
+						: undefined;
+					setBookmarks(new Map(rows.map((row) => [row.articleId, row])));
+					setItems(
+						rows
+							.filter((row) => !subTitle || row.feedTitle === subTitle)
+							.map(bookmarkToFeedItem),
+					);
+					return;
+				}
 				if (cloudRef.current) {
 					const page = await feedsCloudItems({
 						feedId: subscriptionId ?? undefined,
@@ -752,6 +795,105 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		}
 	}, [applySub, renameTarget, renameTitle, t]);
 
+	useEffect(() => {
+		if (source === null || starredOnly) return;
+		if (!vaultPath) {
+			setBookmarks(new Map());
+			return;
+		}
+		let cancelled = false;
+		const ids = items.map((row) => row.id);
+		void rssDailyStatuses(vaultPath, source, ids)
+			.then((rows) => {
+				if (cancelled) return;
+				setBookmarks(new Map(rows.map((row) => [row.articleId, row])));
+			})
+			.catch(() => {
+				/* star state is best-effort; bookmarking reports its own errors */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [items, source, starredOnly, vaultPath]);
+
+	const onStar = useCallback(
+		(item: FeedItem) => {
+			if (!vaultPathRef.current) {
+				notifyError(t("plaza.feeds.errors.bookmark_no_vault"));
+				return;
+			}
+			setBookmarkTarget(item);
+		},
+		[t],
+	);
+
+	const confirmBookmark = useCallback(
+		async (item: FeedItem, tags: string[]) => {
+			const vault = vaultPathRef.current;
+			if (!vault || source === null) {
+				notifyError(t("plaza.feeds.errors.bookmark_no_vault"));
+				return;
+			}
+			let full = item;
+			if (!full.bodyMarkdown?.trim()) {
+				try {
+					full = await (cloudRef.current
+						? feedsCloudItem(item.id)
+						: feedsResolveBody(item.id));
+				} catch {
+					/* fall back to the feed excerpt */
+				}
+			}
+			try {
+				const result = await rssDailyBookmark({
+					vaultPath: vault,
+					source,
+					item: {
+						...full,
+						subscriptionTitle: item.subscriptionTitle || full.subscriptionTitle,
+					},
+					tags,
+				});
+				setBookmarks((prev) => new Map(prev).set(item.id, result.bookmark));
+				setBookmarkTarget(null);
+				if (result.created) {
+					notifySuccess(
+						t("plaza.feeds.bookmarkSaved", { path: result.bookmark.notePath }),
+					);
+				} else {
+					openVaultRel(result.bookmark.notePath);
+				}
+			} catch (error) {
+				toastHostError(errorText(error), t);
+			}
+		},
+		[source, t],
+	);
+
+	const removeBookmark = useCallback(
+		async (bookmark: RssBookmark) => {
+			const vault = vaultPathRef.current;
+			if (!vault || source === null) return;
+			try {
+				await rssDailyRemove(vault, source, bookmark.articleId);
+				setBookmarks((prev) => {
+					const next = new Map(prev);
+					next.delete(bookmark.articleId);
+					return next;
+				});
+				setBookmarkTarget(null);
+				if (starredOnlyRef.current) {
+					setItems((prev) =>
+						prev.filter((row) => row.id !== bookmark.articleId),
+					);
+				}
+			} catch (error) {
+				toastHostError(errorText(error), t);
+			}
+		},
+		[source, t],
+	);
+
 	const visibleItems = useMemo(
 		() => (hideRead ? items.filter((item) => !item.readAt) : items),
 		[hideRead, items],
@@ -887,6 +1029,33 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									</span>
 								</Button>
 							)}
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label={t("plaza.feeds.starredOnly")}
+										aria-pressed={starredOnly}
+										className={cn(
+											"shrink-0 bg-foreground/5 hover:bg-foreground/10",
+											starredOnly && "bg-foreground/10 text-amber-500",
+										)}
+										onClick={() => {
+											starredOnlyRef.current = !starredOnly;
+											setStarredOnly(!starredOnly);
+											void loadItems(selectedId);
+										}}
+									>
+										<Star
+											className="size-3.5"
+											fill={starredOnly ? "currentColor" : "none"}
+											aria-hidden
+										/>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("plaza.feeds.starredOnly")}</TooltipContent>
+							</Tooltip>
 							{cloudButton}
 						</div>
 						<div className="agentero-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto">
@@ -986,6 +1155,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								importing={importingIds.has(openItem.id)}
 								onResolved={applyItem}
 								resolveBody={cloud ? feedsCloudItem : undefined}
+								starred={bookmarks.has(openItem.id)}
+								onStar={() => onStar(openItem)}
 							/>
 						) : emptyItems ? (
 							<div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -997,9 +1168,11 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									{selected?.lastError
 										? formatHostError(selected.lastError, t)
 										: t(
-												hideRead
-													? "plaza.feeds.emptyUnread"
-													: "plaza.feeds.emptyItems",
+												starredOnly
+													? "plaza.feeds.emptyStarred"
+													: hideRead
+														? "plaza.feeds.emptyUnread"
+														: "plaza.feeds.emptyItems",
 											)}
 								</p>
 							</div>
@@ -1026,6 +1199,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											>
 												<PlazaFeedItemRow
 													item={item}
+													starred={bookmarks.has(item.id)}
+													onStar={onStar}
 													hideSource={selectedId !== null}
 													onOpen={openFeedItem}
 													onImport={(item) => void importItem(item)}
@@ -1069,6 +1244,21 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					onRemove={(sub) => void onRemove(sub.id)}
 				/>
 			) : null}
+
+			<PlazaFeedBookmarkDialog
+				item={bookmarkTarget}
+				bookmark={
+					bookmarkTarget ? (bookmarks.get(bookmarkTarget.id) ?? null) : null
+				}
+				vaultPath={vaultPath}
+				onClose={() => setBookmarkTarget(null)}
+				onConfirm={confirmBookmark}
+				onOpenNote={(bookmark) => {
+					setBookmarkTarget(null);
+					openVaultRel(bookmark.notePath);
+				}}
+				onRemove={removeBookmark}
+			/>
 
 			<CloudSourceDialog
 				open={cloudDialogOpen}

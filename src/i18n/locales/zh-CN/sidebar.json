@@ -347,7 +347,12 @@
 				"cloud_unauthorized": "云端服务拒绝了该只读 Token。",
 				"cloud_unreachable": "无法连接云端 RSS 服务。",
 				"cloud_http": "云端 RSS 服务返回错误。",
-				"cloud_protocol": "云端 RSS 服务返回了无法识别的响应。"
+				"cloud_protocol": "云端 RSS 服务返回了无法识别的响应。",
+				"bookmark_no_vault": "请先打开一个知识库再收藏。",
+				"bookmark_tags": "请填写 1–20 个标签，每个不超过 40 个字符。",
+				"bookmark_invalid": "这条内容无法收藏。",
+				"bookmark_missing": "这条收藏已不存在。",
+				"bookmark_conflict": "每日笔记正在被修改，请稍后重试。"
 			},
 			"hideRead": "隐藏已读",
 			"hideReadShort": "隐藏已读",
@@ -365,7 +370,19 @@
 			"cloudTokenSaved": "已保存（留空则保持不变）",
 			"cloudTest": "测试连接",
 			"cloudConnected": "已连接",
-			"cloudHint": "只读。已读标记和导入记录只保存在本机。"
+			"cloudHint": "只读。已读标记和导入记录只保存在本机。",
+			"star": "收藏到知识库",
+			"starred": "已收藏",
+			"starredOnly": "仅收藏",
+			"emptyStarred": "没有收藏的条目。",
+			"bookmarkTags": "人工标签",
+			"bookmarkTagsPlaceholder": "输入标签后回车",
+			"bookmarkTarget": "{{vault}} / {{path}}",
+			"bookmarkConfirm": "确认收藏",
+			"bookmarkSaved": "已保存到 {{path}}",
+			"bookmarkOpen": "打开笔记",
+			"bookmarkRemove": "移除",
+			"bookmarkRemoveConfirm": "确认移除"
 		},
 		"skills": {
 			"title": "Skill 推荐",

@@ -14,6 +14,7 @@ import {
 	Mail,
 	MailOpen,
 	MessageSquarePlus,
+	Star,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -49,10 +50,14 @@ export function PlazaFeedItemRow({
 	onToggleRead,
 	onImport,
 	importing,
+	starred,
+	onStar,
 }: {
 	item: FeedItem;
 	hideSource: boolean;
 	onOpen: (item: FeedItem) => void;
+	starred: boolean;
+	onStar: (item: FeedItem) => void;
 	/** Omitted for cloud rows: read state is not tracked there yet. */
 	onToggleRead?: (item: FeedItem) => void;
 	onImport: (item: FeedItem) => void;
@@ -133,6 +138,11 @@ export function PlazaFeedItemRow({
 						) : null}
 					</button>
 					<div className="flex shrink-0 flex-col items-center gap-0.5">
+						<FeedStarButton
+							starred={starred}
+							idle="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+							onClick={() => onStar(item)}
+						/>
 						{onToggleRead ? (
 							<FeedReadButton item={item} onClick={() => onToggleRead(item)} />
 						) : null}
@@ -191,6 +201,8 @@ export function PlazaFeedItemDetail({
 	onResolved,
 	onToggleRead,
 	resolveBody = feedsResolveBody,
+	starred,
+	onStar,
 }: {
 	item: FeedItem;
 	hideSource: boolean;
@@ -201,6 +213,8 @@ export function PlazaFeedItemDetail({
 	onToggleRead?: () => void;
 	/** Body loader; cloud items must not hit the local `feeds.sqlite` resolver. */
 	resolveBody?: (id: string) => Promise<FeedItem>;
+	starred: boolean;
+	onStar: () => void;
 }) {
 	const { t, i18n } = useTranslation("sidebar");
 	const [resolving, setResolving] = useState(!item.bodyMarkdown);
@@ -272,6 +286,7 @@ export function PlazaFeedItemDetail({
 						</Tooltip>
 					) : null}
 				</div>
+				<FeedStarButton starred={starred} onClick={onStar} />
 				{onToggleRead ? (
 					<FeedReadButton item={item} onClick={onToggleRead} />
 				) : null}
@@ -371,6 +386,48 @@ function FeedReadButton({
 					) : (
 						<Mail className="size-3.5" aria-hidden />
 					)}
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
+	);
+}
+
+function FeedStarButton({
+	starred,
+	idle,
+	onClick,
+}: {
+	starred: boolean;
+	/** Classes applied while not starred (e.g. hover-reveal on cards). */
+	idle?: string;
+	onClick: () => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const label = t(starred ? "plaza.feeds.starred" : "plaza.feeds.star");
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={label}
+					aria-pressed={starred}
+					className={cn(
+						"transition-opacity duration-150 ease-out",
+						starred ? "text-amber-500 hover:text-amber-500" : idle,
+					)}
+					onClick={(event) => {
+						event.stopPropagation();
+						onClick();
+					}}
+				>
+					<Star
+						className="size-3.5"
+						fill={starred ? "currentColor" : "none"}
+						aria-hidden
+					/>
 				</Button>
 			</TooltipTrigger>
 			<TooltipContent>{label}</TooltipContent>

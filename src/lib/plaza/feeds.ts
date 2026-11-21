@@ -423,6 +423,11 @@ const FEED_ERROR_KEYS = {
 	cloud_unreachable: "plaza.feeds.errors.cloud_unreachable",
 	cloud_http: "plaza.feeds.errors.cloud_http",
 	cloud_protocol: "plaza.feeds.errors.cloud_protocol",
+	bookmark_no_vault: "plaza.feeds.errors.bookmark_no_vault",
+	bookmark_tags: "plaza.feeds.errors.bookmark_tags",
+	bookmark_invalid: "plaza.feeds.errors.bookmark_invalid",
+	bookmark_missing: "plaza.feeds.errors.bookmark_missing",
+	bookmark_conflict: "plaza.feeds.errors.bookmark_conflict",
 	// Operation-level codes: used when the Host error carries no message.
 	listFailed: "plaza.feeds.errors.opFailed",
 	addFailed: "plaza.feeds.errors.opFailed",
@@ -434,6 +439,7 @@ const FEED_ERROR_KEYS = {
 	pinFailed: "plaza.feeds.errors.opFailed",
 	resolveFailed: "plaza.feeds.errors.opFailed",
 	cloudFailed: "plaza.feeds.errors.opFailed",
+	bookmarkFailed: "plaza.feeds.errors.opFailed",
 } as const;
 
 export type FeedErrorKey =
