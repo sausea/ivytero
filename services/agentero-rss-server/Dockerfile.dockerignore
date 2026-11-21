@@ -6,6 +6,7 @@
 !crates/
 !services/
 !patches/
+!templates/
 **/target
 **/node_modules
 src-tauri/pdfium

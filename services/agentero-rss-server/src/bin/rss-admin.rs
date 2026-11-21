@@ -92,12 +92,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 interval,
             } => {
                 let url = normalize_feed_url(&url).map_err(|e| e.to_string())?;
-                let title = title.unwrap_or_else(|| {
-                    url::Url::parse(&url)
-                        .ok()
-                        .and_then(|u| u.host_str().map(str::to_string))
-                        .unwrap_or_else(|| url.clone())
-                });
+                // Untitled feeds keep the url until the first fetch supplies the channel title.
+                let title = title.unwrap_or_else(|| url.clone());
                 let interval = match interval {
                     Some(i) => i,
                     None => default_refresh_from_env()?,
