@@ -504,6 +504,10 @@ export const commands = {
 	feedsCloudList: () => __TAURI_INVOKE<ApiResult<FeedList>>("feeds_cloud_list"),
 	feedsCloudItems: (args: FeedsCloudItemsArgs) => __TAURI_INVOKE<ApiResult<CloudFeedItemsPage>>("feeds_cloud_items", { args }),
 	feedsCloudItem: (args: FeedsIdArgs) => __TAURI_INVOKE<ApiResult<FeedItem>>("feeds_cloud_item", { args }),
+	rssDailyBookmark: (args: RssDailyBookmarkArgs) => __TAURI_INVOKE<ApiResult<RssBookmarkResult>>("rss_daily_bookmark", { args }),
+	rssDailyStatuses: (args: RssDailyStatusesArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_statuses", { args }),
+	rssDailyList: (args: RssDailyListArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_list", { args }),
+	rssDailyRemove: (args: RssDailyRemoveArgs) => __TAURI_INVOKE<ApiResult<null>>("rss_daily_remove", { args }),
 	/**
 	 *  Rank today's arXiv papers against the Vault library.
 	 * 
@@ -5405,6 +5409,63 @@ export type ResolvedLink_Serialize = {
 	status: LinkResolutionStatus,
 	targetPath?: string | null,
 	candidates?: string[],
+};
+
+export type RssBookmark = {
+	serverId: string,
+	articleId: string,
+	notePath: string,
+	archiveDate: string,
+	bookmarkedAt: string,
+	tags: string[],
+	title: string,
+	feedTitle: string,
+	url: string | null,
+	contentStatus: string,
+	aiStatus: string,
+};
+
+export type RssBookmarkInput = {
+	source: FeedSource,
+	articleId: string,
+	title: string,
+	feedTitle: string,
+	url: string | null,
+	publishedAt: string | null,
+	summaryText: string,
+	bodyMarkdown: string | null,
+	tags: string[],
+	/**  Client-local day the user confirmed, `YYYY-MM-DD`. */
+	archiveDate: string,
+	/**  Client-local time, `YYYY-MM-DD HH:MM`. */
+	bookmarkedAt: string,
+};
+
+export type RssBookmarkResult = {
+	bookmark: RssBookmark,
+	created: boolean,
+};
+
+export type RssDailyBookmarkArgs = {
+	vaultPath: string,
+	input: RssBookmarkInput,
+};
+
+export type RssDailyListArgs = {
+	vaultPath: string,
+	source: FeedSource,
+};
+
+export type RssDailyRemoveArgs = {
+	vaultPath: string,
+	source: FeedSource,
+	articleId: string,
+};
+
+export type RssDailyStatusesArgs = {
+	vaultPath: string,
+	source: FeedSource,
+	articleIds: string[],
 };
 
 export type RtexEventEvt = RtexEventPayload;

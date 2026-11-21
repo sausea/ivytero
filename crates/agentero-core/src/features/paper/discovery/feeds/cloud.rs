@@ -37,6 +37,9 @@ struct StoredConfig {
     base_url: String,
     #[serde(default)]
     token: String,
+    /// Last `serverId` seen for `base_url`; keys local bookmarks of cloud articles.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    server_id: String,
 }
 
 /// What the WebView may see: whether a token exists, never the token.
@@ -178,12 +181,36 @@ fn save_settings_at(
     if let Some(token) = token {
         config.token = token.trim().to_string();
     }
+    if base_url_changed(&config, path)? {
+        config.server_id.clear();
+    }
     if source == FeedSource::Cloud && (config.base_url.is_empty() || config.token.is_empty()) {
         return Err(AppError::message("feeds.cloud_not_configured"));
     }
     config.source = source;
     write_config(path, &config)?;
     Ok(view(&config))
+}
+
+fn base_url_changed(config: &StoredConfig, path: &Path) -> Result<bool, AppError> {
+    Ok(read_config(path)?.base_url != config.base_url)
+}
+
+/// Stable `serverId` of the configured archive, cached after the first `/info`.
+pub async fn server_id() -> Result<String, AppError> {
+    let path = config_path();
+    let config = read_config(&path)?;
+    if !config.server_id.is_empty() {
+        return Ok(config.server_id);
+    }
+    let (base_url, token) = configured()?;
+    let info: CloudFeedInfo = get_json(&base_url, &token, "/info", &[]).await?;
+    let mut config = read_config(&path)?;
+    if config.base_url == base_url {
+        config.server_id = info.server_id.clone();
+        write_config(&path, &config)?;
+    }
+    Ok(info.server_id)
 }
 
 fn configured() -> Result<(String, String), AppError> {

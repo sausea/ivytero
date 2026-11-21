@@ -12,6 +12,7 @@ pub mod open_request;
 pub mod paper;
 pub mod pdf;
 pub mod research_table;
+pub mod rss_archive;
 pub mod sync;
 pub mod translate;
 pub mod vault;

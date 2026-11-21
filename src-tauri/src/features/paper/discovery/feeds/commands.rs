@@ -5,7 +5,7 @@ use super::{
     set_pinned, FeedItem, FeedItemsPage, FeedList, FeedRefreshResult, FeedSub,
 };
 use crate::core::error::{map_err, ApiResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[tauri::command]
 #[specta::specta]
@@ -249,6 +249,81 @@ pub async fn feeds_cloud_items(args: FeedsCloudItemsArgs) -> ApiResult<CloudFeed
 pub async fn feeds_cloud_item(args: FeedsIdArgs) -> ApiResult<FeedItem> {
     match cloud::item(&args.id).await {
         Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+use agentero_core::features::rss_archive::{self, RssBookmark, RssBookmarkInput};
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssBookmarkResult {
+    pub bookmark: RssBookmark,
+    pub created: bool,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssDailyBookmarkArgs {
+    pub vault_path: String,
+    pub input: RssBookmarkInput,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssDailyStatusesArgs {
+    pub vault_path: String,
+    pub source: FeedSource,
+    pub article_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssDailyListArgs {
+    pub vault_path: String,
+    pub source: FeedSource,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssDailyRemoveArgs {
+    pub vault_path: String,
+    pub source: FeedSource,
+    pub article_id: String,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rss_daily_bookmark(args: RssDailyBookmarkArgs) -> ApiResult<RssBookmarkResult> {
+    match rss_archive::bookmark(&args.vault_path, args.input).await {
+        Ok((bookmark, created)) => ApiResult::ok(RssBookmarkResult { bookmark, created }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rss_daily_statuses(args: RssDailyStatusesArgs) -> ApiResult<Vec<RssBookmark>> {
+    match rss_archive::statuses(&args.vault_path, args.source, &args.article_ids).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rss_daily_list(args: RssDailyListArgs) -> ApiResult<Vec<RssBookmark>> {
+    match rss_archive::list(&args.vault_path, args.source).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rss_daily_remove(args: RssDailyRemoveArgs) -> ApiResult<()> {
+    match rss_archive::remove(&args.vault_path, args.source, &args.article_id).await {
+        Ok(()) => ApiResult::ok(()),
         Err(e) => map_err(e),
     }
 }
