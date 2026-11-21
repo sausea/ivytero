@@ -1,0 +1,17 @@
+*
+!Cargo.toml
+!Cargo.lock
+!src-tauri/
+!cli/
+!crates/
+!services/
+!patches/
+**/target
+**/node_modules
+src-tauri/pdfium
+src-tauri/adapters
+src-tauri/resources
+src-tauri/gen
+src-tauri/icons
+src-tauri/cli
+src-tauri/dictionary

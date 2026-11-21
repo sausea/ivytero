@@ -356,4 +356,3 @@ fn urlencode_segment(raw: &str) -> String {
         })
         .collect()
 }
-
