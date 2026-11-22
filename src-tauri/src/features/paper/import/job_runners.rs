@@ -126,7 +126,10 @@ fn download_assets_runner(
                 // ParseBody — those jobs fail with "No local PDF".
                 // ParseBody from the plan is already queued; don't enqueue it twice.
                 let caps = cache.caps_for(&vault, &path);
-                if caps.needs_paper_md() && !downloaded.preparation.has_parse_body() {
+                let auto_parse = app
+                    .state::<crate::features::system::settings::AppSettingsStore>()
+                    .layout_auto_parse();
+                if auto_parse && caps.needs_paper_md() && !downloaded.preparation.has_parse_body() {
                     let snap = center
                         .enqueue_parse_body(&vault, &path, JobLane::Normal, false, None)
                         .await;
@@ -290,13 +293,17 @@ fn recognize_metadata_runner(
         }
 
         let final_caps = cache.caps_for(&vault, &final_path);
-        if final_caps.needs_paper_md()
-            || crate::features::paper::catalog::papers::get_by_path(&vault, &final_path)
-                .ok()
-                .flatten()
-                .is_some_and(|paper| {
-                    agentero_core::features::paper::source::needs_preparation(&vault, &paper)
-                })
+        let auto_parse = app
+            .state::<crate::features::system::settings::AppSettingsStore>()
+            .layout_auto_parse();
+        if auto_parse
+            && (final_caps.needs_paper_md()
+                || crate::features::paper::catalog::papers::get_by_path(&vault, &final_path)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|paper| {
+                        agentero_core::features::paper::source::needs_preparation(&vault, &paper)
+                    }))
         {
             let snap = center
                 .enqueue_parse_body(&vault, &final_path, JobLane::Normal, false, None)

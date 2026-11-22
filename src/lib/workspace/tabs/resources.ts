@@ -32,6 +32,7 @@ import {
 	plazaSourceForPath,
 	plazaTitleForPath,
 } from "@/lib/plaza";
+import { getSettings } from "@/lib/settings/react-store";
 import {
 	ensureLocalFsScope,
 	type FileNode,
@@ -82,6 +83,7 @@ function reconcilePaperOnOpen(
 	vaultPath: string | null,
 ): void {
 	if (!isTauri() || !vaultPath) return;
+	if (!getSettings().layout.autoParse) return;
 	const rel = toVaultRelative(vaultPath, paperDir)
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");

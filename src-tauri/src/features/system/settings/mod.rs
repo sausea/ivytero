@@ -1016,6 +1016,16 @@ impl AppSettingsStore {
     }
 
     /// Whether imported papers get a background full-text translation job.
+    /// Whether import / download / open may queue layout analysis and
+    /// PAPER.md parsing on their own (Settings → Layout → auto-parse).
+    pub fn layout_auto_parse(&self) -> bool {
+        self.inner
+            .lock()
+            .ok()
+            .map(|guard| guard.layout.auto_parse)
+            .unwrap_or(false)
+    }
+
     pub fn auto_translate_import(&self) -> bool {
         self.inner
             .lock()

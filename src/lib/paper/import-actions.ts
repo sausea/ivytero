@@ -373,7 +373,7 @@ async function finishImportedPapers(
 		}
 	}
 	for (const paper of result.imported) {
-		if (!paper.pdf) continue;
+		if (!paper.pdf || !getSettings().layout.autoParse) continue;
 		const abs = paper.paperDir
 			? paper.paperDir.replace(/[\\/]+$/, "")
 			: joinVaultPath(

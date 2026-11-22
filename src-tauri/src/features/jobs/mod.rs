@@ -1999,6 +1999,9 @@ pub fn spawn_layout_after_import(app: Option<&tauri::AppHandle>, vault: &Path, p
     tauri::async_runtime::spawn(async move {
         let center = app.state::<JobCenter>().handle();
         let settings = app.state::<crate::features::system::settings::AppSettingsStore>();
+        if !settings.layout_auto_parse() {
+            return;
+        }
         let backend = settings.layout_backend();
         let auto_translate = settings.auto_translate_import();
         center.apply_layout_backend(&backend).await;
@@ -2031,6 +2034,13 @@ pub fn spawn_parse_body_after_assets(
     let Some(app) = app else {
         return;
     };
+    if !force
+        && !app
+            .state::<crate::features::system::settings::AppSettingsStore>()
+            .layout_auto_parse()
+    {
+        return;
+    }
     let app = app.clone();
     let vault = vault.to_path_buf();
     let path_rel = path_rel.to_string();
