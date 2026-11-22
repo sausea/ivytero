@@ -246,3 +246,7 @@ td.actions button {
 	background: var(--bad);
 	color: #fff;
 }
+
+[hidden] {
+	display: none !important;
+}
