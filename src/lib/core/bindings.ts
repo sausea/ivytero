@@ -504,6 +504,10 @@ export const commands = {
 	feedsCloudList: () => __TAURI_INVOKE<ApiResult<FeedList>>("feeds_cloud_list"),
 	feedsCloudItems: (args: FeedsCloudItemsArgs) => __TAURI_INVOKE<ApiResult<CloudFeedItemsPage>>("feeds_cloud_items", { args }),
 	feedsCloudItem: (args: FeedsIdArgs) => __TAURI_INVOKE<ApiResult<FeedItem>>("feeds_cloud_item", { args }),
+	/**  Read marks for cloud articles stay on this device; the archive is not written. */
+	feedsCloudSetRead: (args: FeedsSetReadArgs) => __TAURI_INVOKE<ApiResult<FeedItem>>("feeds_cloud_set_read", { args }),
+	feedsCloudMarkAllRead: (args: FeedsMarkAllReadArgs) => __TAURI_INVOKE<ApiResult<FeedList>>("feeds_cloud_mark_all_read", { args }),
+	feedsMarkAllRead: (args: FeedsMarkAllReadArgs) => __TAURI_INVOKE<ApiResult<FeedList>>("feeds_mark_all_read", { args }),
 	rssDailyBookmark: (args: RssDailyBookmarkArgs) => __TAURI_INVOKE<ApiResult<RssBookmarkResult>>("rss_daily_bookmark", { args }),
 	rssDailyStatuses: (args: RssDailyStatusesArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_statuses", { args }),
 	rssDailyList: (args: RssDailyListArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_list", { args }),
@@ -2779,6 +2783,8 @@ export type CliInstallStatus = {
 export type CloudFeedInfo = {
 	apiVersion: number,
 	serverId: string,
+	/**  Archive clock; seeds the unread watermark so it matches `firstSeenAt`. */
+	serverTime?: string | null,
 };
 
 export type CloudFeedItemsPage = {
@@ -3387,6 +3393,8 @@ export type FeedSub = {
 	lastFetchedAt: string | null,
 	lastError: string | null,
 	itemCount: number,
+	/**  `None` when the source cannot count unread items. */
+	unreadCount: number | null,
 	pinned: boolean,
 	pinnedAt: string | null,
 };
@@ -3407,6 +3415,8 @@ export type FeedsCloudItemsArgs = {
 	feedId?: string | null,
 	cursor?: string | null,
 	limit?: number | null,
+	/**  Skip articles this device has read. */
+	unreadOnly?: boolean,
 };
 
 export type FeedsCloudSettingsSetArgs = {
@@ -3432,6 +3442,11 @@ export type FeedsItemsArgs = {
 	limit?: number | null,
 	beforePublishedAt?: string | null,
 	beforeId?: string | null,
+};
+
+export type FeedsMarkAllReadArgs = {
+	/**  One subscription, or every subscription when absent. */
+	id?: string | null,
 };
 
 export type FeedsRefreshArgs = {

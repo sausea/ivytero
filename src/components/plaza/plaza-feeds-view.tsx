@@ -5,6 +5,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TFunction } from "i18next";
 import {
+	CheckCheck,
 	Cloud,
 	EllipsisVertical,
 	EyeOff,
@@ -58,11 +59,13 @@ import {
 	feedsCloudItem,
 	feedsCloudItems,
 	feedsCloudList,
+	feedsCloudSetRead,
 	feedsCloudSettingsGet,
 	feedsCloudSettingsSet,
 	feedsCloudTest,
 	feedsItems,
 	feedsList,
+	feedsMarkAllRead,
 	feedsMarkImported,
 	feedsRefresh,
 	feedsRemove,
@@ -114,6 +117,15 @@ function openFeedSubMenu(
 	event.preventDefault();
 	event.stopPropagation();
 	setMenu({ sub, x: event.clientX, y: event.clientY });
+}
+
+function UnreadCount({ value }: { value: number | null }) {
+	if (!value) return null;
+	return (
+		<span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+			{value > 999 ? "999+" : value}
+		</span>
+	);
 }
 
 function FeedSubMenu({
@@ -435,6 +447,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
+	const [markingAll, setMarkingAll] = useState(false);
 	const [renameTarget, setRenameTarget] = useState<FeedSub | null>(null);
 	const [renameTitle, setRenameTitle] = useState("");
 	const [openItem, setOpenItem] = useState<FeedItem | null>(null);
@@ -498,6 +511,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				if (cloudRef.current) {
 					const page = await feedsCloudItems({
 						feedId: subscriptionId ?? undefined,
+						unreadOnly: hideReadRef.current,
 					});
 					if (request !== itemsRequest.current) return;
 					nextCursorRef.current = page.nextCursor;
@@ -532,6 +546,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			const page = await feedsCloudItems({
 				feedId: selectedIdRef.current ?? undefined,
 				cursor,
+				unreadOnly: hideReadRef.current,
 			});
 			if (request !== itemsRequest.current) return;
 			nextCursorRef.current = page.nextCursor;
@@ -705,7 +720,24 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			if (readPending.current.has(item.id)) return;
 			readPending.current.add(item.id);
 			try {
-				const next = await feedsSetRead(item.id, read);
+				const next = await (cloudRef.current
+					? feedsCloudSetRead(item.id, read)
+					: feedsSetRead(item.id, read));
+				if (!item.readAt !== !next.readAt) {
+					setSubs((rows) =>
+						rows.map((row) =>
+							row.id === item.subscriptionId && row.unreadCount !== null
+								? {
+										...row,
+										unreadCount: Math.max(
+											0,
+											row.unreadCount + (next.readAt ? -1 : 1),
+										),
+									}
+								: row,
+						),
+					);
+				}
 				setItems((rows) =>
 					rows.map((row) =>
 						row.id === item.id ? { ...row, readAt: next.readAt } : row,
@@ -725,10 +757,26 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		[t],
 	);
 
+	const onMarkAllRead = useCallback(async () => {
+		setMarkingAll(true);
+		try {
+			setSubs(
+				[...(await feedsMarkAllRead(cloudRef.current, selectedId))].sort(
+					compareFeedSubs,
+				),
+			);
+			await loadItems(selectedId, false);
+		} catch (error) {
+			toastHostError(errorText(error), t);
+		} finally {
+			setMarkingAll(false);
+		}
+	}, [loadItems, selectedId, t]);
+
 	const openFeedItem = useCallback(
 		(item: FeedItem) => {
 			setOpenItem(item);
-			if (!cloudRef.current && !item.readAt) void setRead(item, true);
+			if (!item.readAt) void setRead(item, true);
 		},
 		[setRead],
 	);
@@ -939,6 +987,12 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		? (subs.find((row) => row.id === selectedId) ?? null)
 		: null;
 	const emptyItems = !loading && visibleItems.length === 0;
+	const totalUnread = subs.some((row) => row.unreadCount !== null)
+		? subs.reduce((n, row) => n + (row.unreadCount ?? 0), 0)
+		: null;
+	const hasUnread =
+		(selected ? selected.unreadCount : totalUnread) !== 0 ||
+		items.some((row) => !row.readAt);
 	const hasSubs = subs.length > 0;
 
 	return (
@@ -1007,28 +1061,42 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									{t("plaza.feeds.refresh")}
 								</span>
 							</Button>
-							{cloud ? null : (
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									aria-pressed={hideRead}
-									className={cn(
-										"min-w-0 flex-1 bg-foreground/5 hover:bg-foreground/10",
-										hideRead && "bg-foreground/10 text-foreground",
-									)}
-									onClick={() => {
-										hideReadRef.current = !hideRead;
-										setHideRead(!hideRead);
-										void loadItems(selectedId, false);
-									}}
-								>
-									<EyeOff data-icon="inline-start" aria-hidden />
-									<span className="min-w-0 truncate">
-										{t("plaza.feeds.hideReadShort")}
-									</span>
-								</Button>
-							)}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								aria-pressed={hideRead}
+								className={cn(
+									"min-w-0 flex-1 bg-foreground/5 hover:bg-foreground/10",
+									hideRead && "bg-foreground/10 text-foreground",
+								)}
+								onClick={() => {
+									hideReadRef.current = !hideRead;
+									setHideRead(!hideRead);
+									void loadItems(selectedId, false);
+								}}
+							>
+								<EyeOff data-icon="inline-start" aria-hidden />
+								<span className="min-w-0 truncate">
+									{t("plaza.feeds.hideReadShort")}
+								</span>
+							</Button>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label={t("plaza.feeds.markAllRead")}
+										className="shrink-0 bg-foreground/5 hover:bg-foreground/10"
+										disabled={markingAll || !hasUnread}
+										onClick={() => void onMarkAllRead()}
+									>
+										<CheckCheck className="size-3.5" aria-hidden />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>{t("plaza.feeds.markAllRead")}</TooltipContent>
+							</Tooltip>
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<Button
@@ -1066,7 +1134,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									void loadItems(null);
 								}}
 								className={cn(
-									"flex w-full rounded-lg px-2.5 py-1.5 text-left text-sm",
+									"flex w-full items-center gap-1 rounded-lg px-2.5 py-1.5 text-left text-sm",
 									"transition-colors duration-150 ease-out",
 									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 									selectedId === null
@@ -1074,7 +1142,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 										: "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
 								)}
 							>
-								{t("plaza.feeds.all")}
+								<span className="min-w-0 flex-1 truncate">
+									{t("plaza.feeds.all")}
+								</span>
+								<UnreadCount value={totalUnread} />
 							</button>
 							{subs.map((sub) => (
 								<div key={sub.id} className="group/feed relative">
@@ -1104,7 +1175,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 													aria-hidden
 												/>
 											) : null}
-											<span className="truncate text-sm">{sub.title}</span>
+											<span className="min-w-0 flex-1 truncate text-sm">
+												{sub.title}
+											</span>
+											<UnreadCount value={sub.unreadCount} />
 										</span>
 										{sub.lastError ? (
 											<span className="truncate text-destructive text-xs">
@@ -1146,11 +1220,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 									setOpenItem(null);
 									if (hideRead) void loadItems(selectedId);
 								}}
-								onToggleRead={
-									cloud
-										? undefined
-										: () => void setRead(openItem, !openItem.readAt)
-								}
+								onToggleRead={() => void setRead(openItem, !openItem.readAt)}
 								onImport={(item) => void importItem(item)}
 								importing={importingIds.has(openItem.id)}
 								onResolved={applyItem}
@@ -1205,10 +1275,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 													onOpen={openFeedItem}
 													onImport={(item) => void importItem(item)}
 													importing={importingIds.has(item.id)}
-													onToggleRead={
-														cloud
-															? undefined
-															: (item) => void setRead(item, !item.readAt)
+													onToggleRead={(item) =>
+														void setRead(item, !item.readAt)
 													}
 												/>
 											</div>

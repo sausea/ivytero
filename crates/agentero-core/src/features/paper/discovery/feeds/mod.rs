@@ -4,6 +4,7 @@
 
 pub mod body;
 pub mod cloud;
+pub mod cloud_reads;
 pub mod parse;
 mod schema;
 
@@ -40,6 +41,8 @@ pub struct FeedSub {
     pub last_fetched_at: Option<String>,
     pub last_error: Option<String>,
     pub item_count: i64,
+    /// `None` when the source cannot count unread items.
+    pub unread_count: Option<i64>,
     pub pinned: bool,
     pub pinned_at: Option<String>,
 }
@@ -262,7 +265,9 @@ fn list_subs(conn: &Connection) -> Result<Vec<FeedSub>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.url, s.title, s.added_at, s.last_fetched_at, s.last_error,
                 (SELECT COUNT(*) FROM items i WHERE i.subscription_id = s.id),
-                s.pinned, s.pinned_at
+                s.pinned, s.pinned_at,
+                (SELECT COUNT(*) FROM items i
+                 WHERE i.subscription_id = s.id AND i.read_at IS NULL)
          FROM subscriptions s
          ORDER BY s.pinned DESC, s.pinned_at DESC, s.added_at ASC",
     )?;
@@ -280,6 +285,7 @@ fn map_feed_sub(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedSub> {
         last_fetched_at: row.get(4)?,
         last_error: row.get(5)?,
         item_count: row.get(6)?,
+        unread_count: Some(row.get(9)?),
         pinned: pinned_raw != 0,
         pinned_at: row.get(8)?,
     })
@@ -563,6 +569,17 @@ pub fn mark_imported(id: &str) -> Result<FeedItem, AppError> {
         return Err(AppError::message("feeds.not_found"));
     }
     get_item(&conn, id)
+}
+
+/// Mark every unread item read, in one subscription or in all of them.
+pub fn mark_all_read(subscription_id: Option<&str>) -> Result<Vec<FeedSub>, AppError> {
+    let conn = ensure_feeds()?;
+    conn.execute(
+        "UPDATE items SET read_at = ?1
+         WHERE read_at IS NULL AND (?2 IS NULL OR subscription_id = ?2)",
+        params![now_rfc3339(), subscription_id],
+    )?;
+    list_subs(&conn)
 }
 
 pub fn set_read(id: &str, read: bool) -> Result<FeedItem, AppError> {

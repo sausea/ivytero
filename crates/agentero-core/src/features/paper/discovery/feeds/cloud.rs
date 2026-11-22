@@ -3,10 +3,11 @@
 //! The cloud archive only serves feeds and articles; nothing here writes back
 //! to it. The bearer token stays in the Host (`rss-cloud.json`, owner-only)
 //! and never crosses to the WebView. Cloud rows are mapped onto the local
-//! [`FeedSub`] / [`FeedItem`] shapes with no reader state, so the timeline can
-//! render them without touching `feeds.sqlite`.
+//! [`FeedSub`] / [`FeedItem`] shapes without touching `feeds.sqlite`; read
+//! marks live on this device in [`cloud_reads`].
 
 use super::body::html_to_markdown;
+use super::cloud_reads;
 use super::{FeedItem, FeedSub};
 use crate::error::AppError;
 use crate::{http, paths};
@@ -56,6 +57,9 @@ pub struct CloudFeedSettings {
 pub struct CloudFeedInfo {
     pub api_version: u32,
     pub server_id: String,
+    /// Archive clock; seeds the unread watermark so it matches `firstSeenAt`.
+    #[serde(default)]
+    pub server_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -76,6 +80,9 @@ struct WireFeed {
     last_error: Option<String>,
     #[serde(default)]
     article_count: i64,
+    /// Present when `newSince` was sent (servers before it ignore the param).
+    #[serde(default)]
+    new_count: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -293,7 +300,7 @@ pub async fn test_connection(
     Ok(info)
 }
 
-fn to_sub(feed: WireFeed) -> FeedSub {
+fn to_sub(feed: WireFeed, unread_count: Option<i64>) -> FeedSub {
     FeedSub {
         id: feed.id,
         url: feed.url,
@@ -302,6 +309,7 @@ fn to_sub(feed: WireFeed) -> FeedSub {
         last_fetched_at: feed.last_success_at,
         last_error: feed.last_error,
         item_count: feed.article_count,
+        unread_count,
         pinned: false,
         pinned_at: None,
     }
@@ -333,18 +341,77 @@ fn to_item(article: WireArticle, with_body: bool) -> FeedItem {
     }
 }
 
+/// This device's read watermark for the archive, seeded from its clock once.
+async fn read_scope(base: &str, token: &str) -> Result<(String, String), AppError> {
+    let server_id = server_id().await?;
+    if let Some(since) = cloud_reads::unread_since(&cloud_reads::open()?, &server_id)? {
+        return Ok((server_id, since));
+    }
+    let now = archive_now(base, token).await?;
+    cloud_reads::advance(&mut cloud_reads::open()?, &server_id, &now)?;
+    Ok((server_id, now))
+}
+
+async fn archive_now(base: &str, token: &str) -> Result<String, AppError> {
+    let info: CloudFeedInfo = get_json(base, token, "/info", &[]).await?;
+    Ok(info
+        .server_time
+        .unwrap_or_else(crate::time::now_rfc3339_millis))
+}
+
 pub async fn feeds() -> Result<Vec<FeedSub>, AppError> {
     let (base, token) = configured()?;
-    let list: WireFeedList = get_json(&base, &token, "/feeds", &[]).await?;
-    Ok(list.items.into_iter().map(to_sub).collect())
+    let (server_id, since) = read_scope(&base, &token).await?;
+    let list: WireFeedList =
+        get_json(&base, &token, "/feeds", &[("newSince", since.clone())]).await?;
+    let new_counts = list
+        .items
+        .iter()
+        .filter_map(|f| f.new_count.map(|n| (f.id.clone(), n)))
+        .collect();
+    let unread =
+        cloud_reads::unread_counts(&cloud_reads::open()?, &server_id, &since, &new_counts)?;
+    Ok(list
+        .items
+        .into_iter()
+        .map(|f| {
+            let n = unread.get(&f.id).copied();
+            to_sub(f, n)
+        })
+        .collect())
 }
+
+fn with_read_state(
+    server_id: &str,
+    since: &str,
+    articles: Vec<WireArticle>,
+    with_body: bool,
+) -> Result<Vec<FeedItem>, AppError> {
+    let ids: Vec<&str> = articles.iter().map(|a| a.id.as_str()).collect();
+    let marks = cloud_reads::marks(&cloud_reads::open()?, server_id, &ids)?;
+    Ok(articles
+        .into_iter()
+        .map(|a| {
+            let read_at = cloud_reads::read_at(since, &a.first_seen_at, marks.get(&a.id));
+            FeedItem {
+                read_at,
+                ..to_item(a, with_body)
+            }
+        })
+        .collect())
+}
+
+/// Pages fetched at most per call when hiding read items skips whole pages.
+const MAX_UNREAD_SCAN_PAGES: usize = 10;
 
 pub async fn items(
     feed_id: Option<&str>,
     cursor: Option<&str>,
     limit: Option<u32>,
+    unread_only: bool,
 ) -> Result<CloudFeedItemsPage, AppError> {
     let (base, token) = configured()?;
+    let (server_id, since) = read_scope(&base, &token).await?;
     let mut query = vec![(
         "limit",
         limit
@@ -355,22 +422,121 @@ pub async fn items(
     if let Some(id) = feed_id.filter(|s| !s.is_empty()) {
         query.push(("feedId", id.to_string()));
     }
-    if let Some(c) = cursor.filter(|s| !s.is_empty()) {
-        query.push(("cursor", c.to_string()));
+    if unread_only {
+        query.push(("newSince", since.clone()));
     }
-    let page: WireArticlePage = get_json(&base, &token, "/articles", &query).await?;
+    let mut cursor = cursor.filter(|s| !s.is_empty()).map(str::to_string);
+    for _ in 0..MAX_UNREAD_SCAN_PAGES {
+        let mut q = query.clone();
+        if let Some(c) = &cursor {
+            q.push(("cursor", c.clone()));
+        }
+        let page: WireArticlePage = get_json(&base, &token, "/articles", &q).await?;
+        let mut items = with_read_state(&server_id, &since, page.items, false)?;
+        if unread_only {
+            items.retain(|i| i.read_at.is_none());
+        }
+        cursor = page.next_cursor;
+        if !items.is_empty() || cursor.is_none() || !unread_only {
+            return Ok(CloudFeedItemsPage {
+                items,
+                next_cursor: cursor,
+            });
+        }
+    }
     Ok(CloudFeedItemsPage {
-        items: page.items.into_iter().map(|a| to_item(a, false)).collect(),
-        next_cursor: page.next_cursor,
+        items: Vec::new(),
+        next_cursor: cursor,
     })
 }
 
 /// One article with `bodyMarkdown` filled from the archived HTML / summary.
 pub async fn item(id: &str) -> Result<FeedItem, AppError> {
     let (base, token) = configured()?;
+    let (server_id, since) = read_scope(&base, &token).await?;
+    let article = fetch_article(&base, &token, id).await?;
+    with_read_state(&server_id, &since, vec![article], true)?
+        .pop()
+        .ok_or_else(|| AppError::message("feeds.not_found"))
+}
+
+async fn fetch_article(base: &str, token: &str, id: &str) -> Result<WireArticle, AppError> {
     let path = format!("/articles/{}", urlencode_segment(id));
-    let article: WireArticle = get_json(&base, &token, &path, &[]).await?;
-    Ok(to_item(article, true))
+    get_json(base, token, &path, &[]).await
+}
+
+/// Record a read mark on this device; the archive only serves the article.
+pub async fn set_read(id: &str, read: bool) -> Result<FeedItem, AppError> {
+    let (base, token) = configured()?;
+    let (server_id, since) = read_scope(&base, &token).await?;
+    let article = fetch_article(&base, &token, id).await?;
+    let read_at = cloud_reads::set_read(
+        &cloud_reads::open()?,
+        &server_id,
+        &since,
+        &cloud_reads::Article {
+            id: &article.id,
+            feed_id: &article.feed_id,
+            first_seen_at: &article.first_seen_at,
+        },
+        read,
+        &crate::time::now_rfc3339_millis(),
+    )?;
+    Ok(FeedItem {
+        read_at,
+        ..to_item(article, false)
+    })
+}
+
+/// Most articles one feed sweep marks read; older unread ones stay unread.
+const MAX_MARK_ALL: usize = 20_000;
+
+/// All feeds: move the watermark to the archive clock. One feed: mark each
+/// article newer than the watermark read.
+pub async fn mark_all_read(feed_id: Option<&str>) -> Result<Vec<FeedSub>, AppError> {
+    let (base, token) = configured()?;
+    let (server_id, since) = read_scope(&base, &token).await?;
+    let now = crate::time::now_rfc3339_millis();
+    match feed_id.filter(|s| !s.is_empty()) {
+        None => {
+            let archive_now = archive_now(&base, &token).await?;
+            cloud_reads::advance(&mut cloud_reads::open()?, &server_id, &archive_now)?;
+        }
+        Some(feed_id) => {
+            let mut seen = Vec::new();
+            let mut cursor: Option<String> = None;
+            loop {
+                let mut q = vec![
+                    ("limit", MAX_PAGE_SIZE.to_string()),
+                    ("feedId", feed_id.to_string()),
+                    ("newSince", since.clone()),
+                ];
+                if let Some(c) = &cursor {
+                    q.push(("cursor", c.clone()));
+                }
+                let page: WireArticlePage = get_json(&base, &token, "/articles", &q).await?;
+                seen.extend(
+                    page.items
+                        .into_iter()
+                        .filter(|a| a.first_seen_at > since)
+                        .map(|a| (a.id, a.first_seen_at)),
+                );
+                cursor = page.next_cursor;
+                if cursor.is_none() || seen.len() >= MAX_MARK_ALL {
+                    break;
+                }
+            }
+            cloud_reads::mark_feed_read(
+                &mut cloud_reads::open()?,
+                &server_id,
+                &since,
+                feed_id,
+                &seen,
+                &now,
+            )?;
+        }
+    }
+    feeds().await
 }
 
 fn urlencode_segment(raw: &str) -> String {

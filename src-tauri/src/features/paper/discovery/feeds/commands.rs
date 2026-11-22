@@ -233,12 +233,22 @@ pub struct FeedsCloudItemsArgs {
     pub cursor: Option<String>,
     #[serde(default)]
     pub limit: Option<u32>,
+    /// Skip articles this device has read.
+    #[serde(default)]
+    pub unread_only: bool,
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn feeds_cloud_items(args: FeedsCloudItemsArgs) -> ApiResult<CloudFeedItemsPage> {
-    match cloud::items(args.feed_id.as_deref(), args.cursor.as_deref(), args.limit).await {
+    match cloud::items(
+        args.feed_id.as_deref(),
+        args.cursor.as_deref(),
+        args.limit,
+        args.unread_only,
+    )
+    .await
+    {
         Ok(data) => ApiResult::ok(data),
         Err(e) => map_err(e),
     }
@@ -249,6 +259,42 @@ pub async fn feeds_cloud_items(args: FeedsCloudItemsArgs) -> ApiResult<CloudFeed
 pub async fn feeds_cloud_item(args: FeedsIdArgs) -> ApiResult<FeedItem> {
     match cloud::item(&args.id).await {
         Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+/// Read marks for cloud articles stay on this device; the archive is not written.
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_set_read(args: FeedsSetReadArgs) -> ApiResult<FeedItem> {
+    match cloud::set_read(&args.id, args.read).await {
+        Ok(data) => ApiResult::ok(data),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedsMarkAllReadArgs {
+    /// One subscription, or every subscription when absent.
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_cloud_mark_all_read(args: FeedsMarkAllReadArgs) -> ApiResult<FeedList> {
+    match cloud::mark_all_read(args.id.as_deref()).await {
+        Ok(subscriptions) => ApiResult::ok(FeedList { subscriptions }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feeds_mark_all_read(args: FeedsMarkAllReadArgs) -> ApiResult<FeedList> {
+    match super::mark_all_read(args.id.as_deref()) {
+        Ok(subscriptions) => ApiResult::ok(FeedList { subscriptions }),
         Err(e) => map_err(e),
     }
 }

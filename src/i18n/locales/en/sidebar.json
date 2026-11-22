@@ -362,6 +362,7 @@
 			"unread": "Unread",
 			"markRead": "Mark as read",
 			"markUnread": "Mark as unread",
+			"markAllRead": "Mark all as read",
 			"source": "Feed source",
 			"sourceLocal": "Local",
 			"sourceCloud": "Cloud",

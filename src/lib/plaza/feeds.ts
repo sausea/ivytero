@@ -516,6 +516,7 @@ export async function feedsCloudItems(opts: {
 	feedId?: string;
 	cursor?: string | null;
 	limit?: number;
+	unreadOnly?: boolean;
 }): Promise<{ items: FeedItem[]; nextCursor: string | null }> {
 	return callApi(
 		() =>
@@ -523,6 +524,7 @@ export async function feedsCloudItems(opts: {
 				feedId: opts.feedId ?? null,
 				cursor: opts.cursor ?? null,
 				limit: opts.limit ?? CLOUD_PAGE_SIZE,
+				unreadOnly: opts.unreadOnly ?? false,
 			}),
 		{ fallback: "feeds.cloudFailed" },
 	);
@@ -532,4 +534,29 @@ export async function feedsCloudItem(id: string): Promise<FeedItem> {
 	return callApi(() => commands.feedsCloudItem({ id }), {
 		fallback: "feeds.cloudFailed",
 	});
+}
+
+/** Read marks for cloud articles are stored on this device only. */
+export async function feedsCloudSetRead(
+	id: string,
+	read: boolean,
+): Promise<FeedItem> {
+	return callApi(() => commands.feedsCloudSetRead({ id, read }), {
+		fallback: "feeds.cloudFailed",
+	});
+}
+
+/** Mark one subscription (or all when `id` is null) read; returns fresh subs. */
+export async function feedsMarkAllRead(
+	cloud: boolean,
+	id: string | null,
+): Promise<FeedSub[]> {
+	const data = await callApi(
+		() =>
+			cloud
+				? commands.feedsCloudMarkAllRead({ id })
+				: commands.feedsMarkAllRead({ id }),
+		{ fallback: cloud ? "feeds.cloudFailed" : "feeds.markFailed" },
+	);
+	return data.subscriptions;
 }
