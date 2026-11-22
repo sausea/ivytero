@@ -27,6 +27,24 @@ pub fn needs_translation(title: &str) -> bool {
     kana_hangul > 0 || letters > han * 2
 }
 
+/// Engine auto-detection reads short Japanese titles as Chinese and drops the
+/// kana, so pin the source when the script makes it unambiguous.
+pub fn source_lang(title: &str) -> &'static str {
+    if title
+        .chars()
+        .any(|c| ('\u{3040}'..='\u{30ff}').contains(&c))
+    {
+        "ja"
+    } else if title
+        .chars()
+        .any(|c| ('\u{ac00}'..='\u{d7af}').contains(&c))
+    {
+        "ko"
+    } else {
+        "auto"
+    }
+}
+
 /// One batch, newest first. Returns `(stored, failed)`.
 pub async fn translate_batch<F, Fut>(
     archive: &Archive,
@@ -68,7 +86,8 @@ impl TitleTranslator {
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
         loop {
             let wait = match translate_batch(&self.archive, |title| async move {
-                agentero_core::features::translate::free_mt_to_zh(&title).await
+                agentero_core::features::translate::free_mt_to_zh_from(&title, source_lang(&title))
+                    .await
             })
             .await
             {
@@ -94,6 +113,13 @@ impl TitleTranslator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pins_source_for_kana_and_hangul() {
+        assert_eq!(source_lang("新しい電池技術が発表されました"), "ja");
+        assert_eq!(source_lang("삼성 실적 발표"), "ko");
+        assert_eq!(source_lang("Fed holds rates"), "auto");
+    }
 
     #[test]
     fn skips_only_chinese_titles() {

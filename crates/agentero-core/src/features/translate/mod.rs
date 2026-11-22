@@ -65,11 +65,18 @@ pub const FREE_MT_ZH_TIMEOUT_MS: u32 = 5_000;
 /// Spawns one request per [`ZH_RACE_PROVIDERS`] entry and returns the **first**
 /// non-empty translation. Dropping unfinished tasks cancels their HTTP work.
 pub async fn free_mt_to_zh(text: &str) -> Option<String> {
-    free_mt_to_zh_with(text, translate_text).await
+    free_mt_to_zh_with(text, "auto", translate_text).await
+}
+
+/// [`free_mt_to_zh`] with an explicit source language, for short text where
+/// engine auto-detection is unreliable (e.g. Japanese titles detected as Chinese).
+pub async fn free_mt_to_zh_from(text: &str, source_lang: &str) -> Option<String> {
+    free_mt_to_zh_with(text, source_lang, translate_text).await
 }
 
 async fn free_mt_to_zh_with<Fut>(
     text: &str,
+    source_lang: &str,
     translate: impl Fn(TranslateTextArgs) -> Fut,
 ) -> Option<String>
 where
@@ -94,7 +101,7 @@ where
                 dictionary_surrounding: None,
                 dictionary_reference: None,
                 text,
-                source_lang: "auto".into(),
+                source_lang: source_lang.into(),
                 target_lang: "zh-CN".into(),
                 provider,
                 api_key: None,
