@@ -373,3 +373,34 @@ pub async fn rss_daily_remove(args: RssDailyRemoveArgs) -> ApiResult<()> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssDailyAnalyzeArgs {
+    pub vault_path: String,
+    pub source: FeedSource,
+    pub article_id: String,
+    pub title: String,
+    pub feed_title: String,
+    pub text: String,
+    pub config: agentero_core::features::rss_archive::RssAnalysisConfig,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rss_daily_analyze(args: RssDailyAnalyzeArgs) -> ApiResult<()> {
+    match rss_archive::analyze_bookmark(
+        &args.vault_path,
+        args.source,
+        &args.article_id,
+        &args.title,
+        &args.feed_title,
+        &args.text,
+        &args.config,
+    )
+    .await
+    {
+        Ok(()) => ApiResult::ok(()),
+        Err(e) => map_err(e),
+    }
+}

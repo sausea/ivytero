@@ -33,6 +33,7 @@ import {
 	DEFAULT_EMBEDDING_SETTINGS,
 	DEFAULT_PAPER_READER_SETTINGS,
 	DEFAULT_PDF_ASK_SETTINGS,
+	DEFAULT_RSS_ANALYSIS_SETTINGS,
 	DEFAULT_SETTINGS,
 	SMART_HIGHLIGHT_CONCURRENCY_CHOICES,
 	SMART_HIGHLIGHT_TIMEOUT_MAX_SECS,
@@ -58,6 +59,7 @@ import {
 	type LibraryColumnPref,
 	type PaperReaderSettings,
 	type PdfAskSettings,
+	type RssAnalysisSettings,
 } from "@/lib/settings/types";
 import {
 	DEFAULT_TRANSLATE_SETTINGS,
@@ -119,6 +121,7 @@ function cloneSettings(s: AppSettings): AppSettings {
 		embedding: { ...s.embedding },
 		translate: { ...s.translate },
 		layout: { ...s.layout, providerConfigs: { ...s.layout.providerConfigs } },
+		rssAnalysis: { ...s.rssAnalysis },
 		dismissedReminders: [...s.dismissedReminders],
 		decision: { ...s.decision },
 	};
@@ -589,6 +592,9 @@ function normalizePartial(
 	);
 	merged.translate = normalizeTranslateSettings(parsed.translate);
 	merged.layout = normalizeLayoutSettings(parsed.layout);
+	merged.rssAnalysis = normalizeRssAnalysisSettings(
+		(parsed as { rssAnalysis?: Partial<RssAnalysisSettings> }).rssAnalysis,
+	);
 	// Legacy key `jev` → `decision` (pre-provider-selection storage).
 	merged.decision = normalizeDecisionSettings(
 		(parsed as { decision?: Partial<DecisionSettings> }).decision ??
@@ -764,6 +770,17 @@ function resolveEmbeddingSource(
 	// Browser/dev cannot know whether a Host key was compiled in. Keep inferred
 	// values on the BYOK side; keyed desktop builds send an explicit source.
 	return "custom";
+}
+
+function normalizeRssAnalysisSettings(
+	raw: Partial<RssAnalysisSettings> | undefined,
+): RssAnalysisSettings {
+	const base = { ...DEFAULT_RSS_ANALYSIS_SETTINGS };
+	if (!raw || typeof raw !== "object") return base;
+	if (typeof raw.baseUrl === "string") base.baseUrl = raw.baseUrl.trim();
+	if (typeof raw.apiKey === "string") base.apiKey = raw.apiKey.trim();
+	if (typeof raw.model === "string") base.model = raw.model.trim();
+	return base;
 }
 
 function normalizeTranslateSettings(

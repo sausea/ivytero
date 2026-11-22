@@ -198,6 +198,7 @@ pub(crate) fn export_typescript_bindings() {
             crate::features::paper::discovery::feeds::commands::rss_daily_statuses,
             crate::features::paper::discovery::feeds::commands::rss_daily_list,
             crate::features::paper::discovery::feeds::commands::rss_daily_remove,
+            crate::features::paper::discovery::feeds::commands::rss_daily_analyze,
             crate::features::paper::discovery::recommend::commands::recommend_arxiv,
             crate::features::paper::discovery::recommend::commands::recommend_arxiv_last,
             crate::features::paper::discovery::recommend::commands::probe_embedding,

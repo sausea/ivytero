@@ -414,6 +414,8 @@ export type AppSettings = {
 	translate: TranslateSettings;
 	/** PDF layout-analysis backend (local ONNX or remote PP-StructureV3). */
 	layout: LayoutSettings;
+	/** OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
+	rssAnalysis: RssAnalysisSettings;
 	/**
 	 * Config reminders dismissed with "don't remind me again". Ids come from
 	 * {@link CONFIG_REMINDER_IDS}; unknown values are dropped on normalize.
@@ -505,7 +507,17 @@ export type PaperReaderSettings = {
  */
 export type EmbeddingSource = "builtin" | "custom";
 
-/** OpenAI-compatible embedding endpoint (BYOK). All-empty = disabled. */
+/** RSS bookmark AI analysis endpoint (BYOK, OpenAI-compatible). All-empty = disabled. */
+export type RssAnalysisSettings = {
+	/** Endpoint base, e.g. `https://api.openai.com/v1`. */
+	baseUrl: string;
+	apiKey: string;
+	model: string;
+};
+
+/** Embedding endpoint: the built-in provider, or a custom OpenAI-compatible
+ * one (BYOK). Custom with all-empty fields = feature disabled.
+ */
 export type EmbeddingSettings = {
 	/**
 	 * Credential source. The Host wire type is a plain string (empty = unset);

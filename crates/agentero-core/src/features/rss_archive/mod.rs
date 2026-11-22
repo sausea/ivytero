@@ -451,6 +451,71 @@ pub async fn list(vault_path: &str, source: FeedSource) -> Result<Vec<RssBookmar
     Ok(rows)
 }
 
+/// OpenAI-compatible endpoint configured in Settings for RSS analysis.
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssAnalysisConfig {
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
+}
+
+const ANALYSIS_MAX_CHARS: usize = 12000;
+
+/// Analyze one bookmarked article with the configured OpenAI-compatible
+/// endpoint and store the Markdown result in its daily-note entry.
+pub async fn analyze_bookmark(
+    vault_path: &str,
+    source: FeedSource,
+    article_id: &str,
+    title: &str,
+    feed_title: &str,
+    text: &str,
+    config: &RssAnalysisConfig,
+) -> Result<(), AppError> {
+    let chat = crate::features::openai_chat::ChatConfig {
+        base_url: config.base_url.clone(),
+        api_key: config.api_key.clone(),
+        model: config.model.clone(),
+    };
+    if !chat.is_configured() {
+        return Err(bad("analysis_unconfigured"));
+    }
+    let vault = resolve_vault(vault_path)?;
+    if article_id.trim().is_empty() {
+        return Err(bad("bookmark_invalid"));
+    }
+    let server_id = server_id_for(source).await?;
+    let (conn, vkey) = index_for(&vault, &index_path())?;
+    let Some(existing) = lookup(&conn, &vkey, &server_id, article_id)? else {
+        return Err(bad("bookmark_missing"));
+    };
+    let key = format!("{server_id}/{article_id}");
+    let text: String = text.chars().take(ANALYSIS_MAX_CHARS).collect();
+    let prompt = format!(
+        "标题：{title}\n来源：{feed_title}\n\n{text}\n\n请用中文输出 Markdown 分析：\n1. 一段话概括核心内容；\n2. 3-5 条关键要点（列表）；\n3. 3-8 个关键词（用、分隔，放在最后一行）。不要大段复述原文。"
+    );
+    let analysis = crate::features::openai_chat::chat_completion(
+        &chat,
+        Some("你是一名阅读助手，帮助用户消化 RSS 文章。只输出 Markdown 分析结果，不要寒暄。"),
+        &prompt,
+    )
+    .await?;
+    let rel = existing.note_path.clone();
+    edit_note(&vault, &rel, |doc| {
+        let doc = doc.ok_or_else(|| bad("bookmark_missing"))?;
+        match md::annotate_entry(doc, &key, &analysis) {
+            Some(next) => Ok((Some(next), ())),
+            None => Err(bad("bookmark_missing")),
+        }
+    })?;
+    conn.execute(
+        "UPDATE rss_bookmarks SET ai_status = 'done' WHERE vault_key = ?1 AND server_id = ?2 AND article_id = ?3",
+        params![vkey, server_id, article_id],
+    )?;
+    Ok(())
+}
+
 /// Remove one article's entry from its daily note and from the index.
 pub async fn remove(
     vault_path: &str,

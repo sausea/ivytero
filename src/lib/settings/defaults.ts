@@ -7,6 +7,7 @@ import type {
 	EmbeddingSettings,
 	PaperReaderSettings,
 	PdfAskSettings,
+	RssAnalysisSettings,
 } from "@/lib/settings/types";
 import { DEFAULT_LIBRARY_COLUMNS } from "@/lib/settings/types";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
@@ -24,6 +25,13 @@ export const DEFAULT_PAPER_READER_SETTINGS: PaperReaderSettings = {
 
 export const DEFAULT_EMBEDDING_SETTINGS: EmbeddingSettings = {
 	source: "custom",
+	baseUrl: "",
+	apiKey: "",
+	model: "",
+};
+
+/** RSS bookmark AI analysis endpoint. All-empty = feature disabled. */
+export const DEFAULT_RSS_ANALYSIS_SETTINGS: RssAnalysisSettings = {
 	baseUrl: "",
 	apiKey: "",
 	model: "",
@@ -210,6 +218,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	embedding: { ...DEFAULT_EMBEDDING_SETTINGS },
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 	layout: { ...DEFAULT_LAYOUT_SETTINGS, providerConfigs: {} },
+	rssAnalysis: { ...DEFAULT_RSS_ANALYSIS_SETTINGS },
 	dismissedReminders: [],
 	decision: { ...DEFAULT_DECISION_SETTINGS },
 };

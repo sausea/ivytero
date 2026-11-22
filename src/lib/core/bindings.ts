@@ -512,6 +512,7 @@ export const commands = {
 	rssDailyStatuses: (args: RssDailyStatusesArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_statuses", { args }),
 	rssDailyList: (args: RssDailyListArgs) => __TAURI_INVOKE<ApiResult<RssBookmark[]>>("rss_daily_list", { args }),
 	rssDailyRemove: (args: RssDailyRemoveArgs) => __TAURI_INVOKE<ApiResult<null>>("rss_daily_remove", { args }),
+	rssDailyAnalyze: (args: RssDailyAnalyzeArgs) => __TAURI_INVOKE<ApiResult<null>>("rss_daily_analyze", { args }),
 	/**
 	 *  Rank today's arXiv papers against the Vault library.
 	 * 
@@ -1909,6 +1910,8 @@ export type AppSettings_Deserialize = {
 	embedding?: EmbeddingSettings,
 	translate?: TranslateSettings,
 	layout?: LayoutSettings,
+	/**  OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
+	rssAnalysis?: RssAnalysisSettings,
 	/**  PostHog product analytics opt-out (applies from the next launch). */
 	telemetryEnabled?: boolean,
 	/**  Plaza discovery sources in the sidebar. Default on. */
@@ -2086,6 +2089,8 @@ export type AppSettings_Serialize = {
 	embedding: EmbeddingSettings,
 	translate: TranslateSettings,
 	layout: LayoutSettings,
+	/**  OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
+	rssAnalysis: RssAnalysisSettings,
 	/**  PostHog product analytics opt-out (applies from the next launch). */
 	telemetryEnabled: boolean,
 	/**  Plaza discovery sources in the sidebar. Default on. */
@@ -5430,6 +5435,20 @@ export type ResolvedLink_Serialize = {
 	candidates?: string[],
 };
 
+/**  OpenAI-compatible endpoint configured in Settings for RSS analysis. */
+export type RssAnalysisConfig = {
+	baseUrl: string,
+	apiKey: string,
+	model: string,
+};
+
+/**  RSS bookmark AI analysis endpoint (BYOK, OpenAI-compatible). All-empty = disabled. */
+export type RssAnalysisSettings = {
+	baseUrl?: string,
+	apiKey?: string,
+	model?: string,
+};
+
 export type RssBookmark = {
 	serverId: string,
 	articleId: string,
@@ -5463,6 +5482,16 @@ export type RssBookmarkInput = {
 export type RssBookmarkResult = {
 	bookmark: RssBookmark,
 	created: boolean,
+};
+
+export type RssDailyAnalyzeArgs = {
+	vaultPath: string,
+	source: FeedSource,
+	articleId: string,
+	title: string,
+	feedTitle: string,
+	text: string,
+	config: RssAnalysisConfig,
 };
 
 export type RssDailyBookmarkArgs = {

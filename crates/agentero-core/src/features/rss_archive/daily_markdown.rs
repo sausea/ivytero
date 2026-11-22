@@ -186,6 +186,73 @@ pub fn append_entry(doc: &str, entry: &str) -> String {
     out
 }
 
+/// Insert an `### AI 分析` section into the entry with `key` and flip
+/// `- AI 状态：` to `done`. Re-analysis replaces the previous section.
+/// `None` when the entry is absent or the analysis is empty.
+pub fn annotate_entry(doc: &str, key: &str, analysis: &str) -> Option<String> {
+    let safe = sanitize_body(analysis);
+    if safe.is_empty() {
+        return None;
+    }
+    let lines: Vec<&str> = doc.lines().collect();
+    let heads = entry_headings(&lines);
+    for (n, &start) in heads.iter().enumerate() {
+        let end = heads.get(n + 1).copied().unwrap_or(lines.len());
+        let block = &lines[start..end];
+        if block_key(block) != Some(key) {
+            continue;
+        }
+        // Drop any previous AI 分析 section so re-analysis replaces it.
+        let mut cleaned: Vec<&str> = Vec::with_capacity(block.len());
+        let mut skip = false;
+        for line in block {
+            let t = line.trim_start();
+            if t == "### AI 分析" {
+                skip = true;
+                continue;
+            }
+            if skip && (t.starts_with("### ") || t.starts_with("## ")) {
+                skip = false;
+            }
+            if !skip {
+                cleaned.push(line);
+            }
+        }
+        let body_at = cleaned
+            .iter()
+            .position(|l| l.trim() == "### 正文")
+            .unwrap_or(cleaned.len());
+        let mut new_block: Vec<String> = Vec::with_capacity(cleaned.len() + safe.lines().count() + 4);
+        for (i, line) in cleaned.iter().enumerate() {
+            if i == body_at {
+                new_block.push("### AI 分析".to_string());
+                new_block.push(String::new());
+                new_block.extend(safe.lines().map(str::to_string));
+                new_block.push(String::new());
+            }
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("- AI 状态：") {
+                let indent = &line[..line.len() - trimmed.len()];
+                new_block.push(format!("{indent}- AI 状态：done"));
+            } else {
+                new_block.push((*line).to_string());
+            }
+        }
+        let mut out = lines[..start].join("\n");
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&new_block.join("\n"));
+        out.push('\n');
+        out.push_str(&lines[end..].join("\n"));
+        if doc.ends_with('\n') && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        return Some(out);
+    }
+    None
+}
+
 /// Drop the entry with `key` (and its leading `---` separator). `None` when absent.
 pub fn remove_entry(doc: &str, key: &str) -> Option<String> {
     let lines: Vec<&str> = doc.lines().collect();
@@ -295,6 +362,30 @@ mod tests {
         assert!(first.starts_with("---\ntype: rss-daily"));
         assert_eq!(find_entries(&first).len(), 2);
         assert!(remove_entry(&doc, "s/zz").is_none());
+    }
+
+    #[test]
+    fn annotates_entry_and_replaces_previous_analysis() {
+        let mut doc = new_document("2026-11-21");
+        doc = append_entry(&doc, &entry("s/a1", "T", "body text"));
+        doc = append_entry(&doc, &entry("s/a2", "U", "other"));
+        let once = annotate_entry(&doc, "s/a1", "## 小结\n第一段。\n## 要点\n- 甲\n- 乙").expect("annotate");
+        assert!(once.contains("### AI 分析"));
+        assert!(once.contains("第一段。"));
+        assert!(once.contains("- AI 状态：done"));
+        assert!(!once.contains("\n## 小结"), "analysis headings must be shifted: {once}");
+        assert!(once.contains("##### 小结"));
+        assert!(once.contains("##### 要点"));
+        assert_eq!(find_entries(&once).len(), 2, "{once}");
+        assert!(find_entries(&once)[0].title == "T");
+        let twice = annotate_entry(&once, "s/a1", "新的分析").expect("re-annotate");
+        assert_eq!(twice.matches("### AI 分析").count(), 1, "{twice}");
+        assert!(twice.contains("新的分析"));
+        assert!(!twice.contains("第一段。"));
+        // The second entry is untouched.
+        assert!(twice.contains("- AI 状态：not_started"));
+        assert!(annotate_entry(&twice, "s/zz", "x").is_none());
+        assert!(annotate_entry(&twice, "s/a1", "  ").is_none());
     }
 
     #[test]

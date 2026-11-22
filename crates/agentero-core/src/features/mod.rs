@@ -9,6 +9,7 @@ pub mod evidence;
 pub mod lifecycle;
 pub mod markdown;
 pub mod open_request;
+pub mod openai_chat;
 pub mod paper;
 pub mod pdf;
 pub mod research_table;

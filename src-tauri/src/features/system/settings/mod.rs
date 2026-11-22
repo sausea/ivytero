@@ -251,6 +251,9 @@ pub struct AppSettings {
     pub translate: TranslateSettings,
     #[serde(default)]
     pub layout: LayoutSettings,
+    /// OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled.
+    #[serde(default)]
+    pub rss_analysis: RssAnalysisSettings,
     /// PostHog product analytics opt-out (applies from the next launch).
     #[serde(default = "default_true")]
     pub telemetry_enabled: bool,
@@ -362,6 +365,18 @@ fn default_smart_highlight_concurrency() -> u32 {
 
 fn default_smart_highlight_timeout_secs() -> u32 {
     120
+}
+
+/// RSS bookmark AI analysis endpoint (BYOK, OpenAI-compatible). All-empty = disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RssAnalysisSettings {
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 /// Embedding endpoint: the built-in provider, or a custom OpenAI-compatible
@@ -631,6 +646,7 @@ impl Default for AppSettings {
             embedding: EmbeddingSettings::default(),
             translate: TranslateSettings::default(),
             layout: LayoutSettings::default(),
+            rss_analysis: RssAnalysisSettings::default(),
             telemetry_enabled: default_true(),
             plaza_enabled: default_true(),
             plaza_hidden_sources: Vec::new(),
