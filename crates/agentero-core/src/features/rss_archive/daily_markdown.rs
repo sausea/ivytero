@@ -106,18 +106,29 @@ pub fn render_entry(f: &EntryFields<'_>) -> String {
     s
 }
 
-/// Line index of every top-level `## ` heading outside code fences.
+/// Line index of every `# ` / `## ` heading outside code fences. Each one ends
+/// the previous block; only `##` blocks carrying an `RSS Key` are entries.
 fn entry_headings(lines: &[&str]) -> Vec<usize> {
     let mut in_fence = false;
     let mut out = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         if is_fence(line) {
             in_fence = !in_fence;
-        } else if !in_fence && line.starts_with("## ") {
+        } else if !in_fence && (line.starts_with("## ") || line.starts_with("# ")) {
             out.push(i);
         }
     }
     out
+}
+
+fn block_key<'a>(block: &[&'a str]) -> Option<&'a str> {
+    if !block.first()?.starts_with("## ") {
+        return None;
+    }
+    block
+        .iter()
+        .find_map(|l| l.trim().strip_prefix(KEY_PREFIX.trim_end()).map(str::trim))
+        .filter(|k| !k.is_empty())
 }
 
 fn meta(lines: &[&str], label: &str) -> Option<String> {
@@ -136,11 +147,7 @@ pub fn find_entries(doc: &str) -> Vec<FoundEntry> {
     for (n, &start) in heads.iter().enumerate() {
         let end = heads.get(n + 1).copied().unwrap_or(lines.len());
         let block = &lines[start..end];
-        let Some(key) = block
-            .iter()
-            .find_map(|l| l.trim().strip_prefix(KEY_PREFIX.trim_end()).map(str::trim))
-            .filter(|k| !k.is_empty())
-        else {
+        let Some(key) = block_key(block) else {
             continue;
         };
         let tags = meta(block, "人工标签")
@@ -185,20 +192,23 @@ pub fn remove_entry(doc: &str, key: &str) -> Option<String> {
     let heads = entry_headings(&lines);
     for (n, &start) in heads.iter().enumerate() {
         let end = heads.get(n + 1).copied().unwrap_or(lines.len());
-        let has_key = lines[start..end]
-            .iter()
-            .any(|l| l.trim().strip_prefix(KEY_PREFIX.trim_end()).map(str::trim) == Some(key));
-        if !has_key {
+        if block_key(&lines[start..end]) != Some(key) {
             continue;
         }
+        let trailing_rule = lines[start..end]
+            .iter()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .is_some_and(|l| l.trim() == "---");
+        let prev_is_entry = n > 0 && block_key(&lines[heads[n - 1]..start]).is_some();
         let mut cut_start = start;
         while cut_start > 0 && lines[cut_start - 1].trim().is_empty() {
             cut_start -= 1;
         }
-        if cut_start > 0 && lines[cut_start - 1].trim() == "---" && n > 0 {
+        // Drop one separator: our own trailing `---`, else the one before us.
+        if !trailing_rule && prev_is_entry && lines[cut_start - 1].trim() == "---" {
             cut_start -= 1;
         }
-        // For the first entry, its trailing `---` lies inside [start, end).
         let cut_end = end;
         let mut kept: Vec<&str> = lines[..cut_start].to_vec();
         kept.extend_from_slice(&lines[cut_end..]);
@@ -266,6 +276,25 @@ mod tests {
         assert!(find_entries(&doc).is_empty());
         assert!(doc.starts_with("---\ntype: rss-daily"));
         assert!(remove_entry(&doc, "s/a1").is_none());
+    }
+
+    #[test]
+    fn removal_stops_at_user_headings_and_keeps_separators() {
+        let mut doc = new_document("2026-11-21");
+        for k in ["s/a1", "s/a2", "s/a3"] {
+            doc = append_entry(&doc, &entry(k, k, "text"));
+        }
+        doc.push_str("\n# My journal\n\npersonal\n\n## Notes\n\nmore\n");
+        let next = remove_entry(&doc, "s/a3").unwrap();
+        assert!(next.contains("# My journal\n\npersonal"));
+        assert!(next.contains("## Notes\n\nmore"));
+        let mid = remove_entry(&doc, "s/a2").unwrap();
+        assert_eq!(mid.matches("\n---\n").count(), 2, "{mid}");
+        assert!(mid.contains("# My journal"));
+        let first = remove_entry(&doc, "s/a1").unwrap();
+        assert!(first.starts_with("---\ntype: rss-daily"));
+        assert_eq!(find_entries(&first).len(), 2);
+        assert!(remove_entry(&doc, "s/zz").is_none());
     }
 
     #[test]
