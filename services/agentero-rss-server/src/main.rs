@@ -50,6 +50,8 @@ async fn main() {
     let app = router(AppState {
         archive,
         read_token: Arc::new(config.read_token.clone()),
+        admin_token: config.admin_token.clone().map(Arc::new),
+        default_refresh_secs: config.default_refresh_secs,
     });
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,

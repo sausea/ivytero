@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Agentero Cloud RSS</title>
+<link rel="stylesheet" href="/admin/app.css">
+<script src="/admin/app.js" defer></script>
+</head>
+<body>
+<section id="login" class="card narrow" hidden>
+  <h1 data-i18n="title">Agentero Cloud RSS</h1>
+  <p class="muted" data-i18n="loginHint"></p>
+  <input id="token" type="password" autocomplete="current-password" data-i18n-placeholder="adminToken">
+  <button type="button" id="loginBtn" class="primary" data-i18n="signIn"></button>
+</section>
+
+<main id="app" hidden>
+  <header>
+    <h1 data-i18n="title">Agentero Cloud RSS</h1>
+    <span id="serverId" class="muted mono"></span>
+    <nav>
+      <button type="button" class="tab active" data-tab="feeds" data-i18n="feeds"></button>
+      <button type="button" class="tab" data-tab="articles" data-i18n="articles"></button>
+    </nav>
+    <button type="button" id="logout" class="ghost" data-i18n="signOut"></button>
+  </header>
+
+  <section id="tab-feeds">
+    <div class="toolbar">
+      <input id="newUrl" type="url" data-i18n-placeholder="feedUrl">
+      <input id="newTitle" type="text" data-i18n-placeholder="titleOptional">
+      <button type="button" id="addBtn" class="primary" data-i18n="add"></button>
+      <span class="spacer"></span>
+      <label class="button" for="opmlFile"><span data-i18n="importOpml">Import OPML</span><input id="opmlFile" type="file" accept=".opml,.xml,text/xml,text/x-opml" hidden></label>
+      <button type="button" id="exportBtn" data-i18n="exportOpml"></button>
+      <button type="button" id="reloadFeeds" class="ghost" data-i18n="reload"></button>
+    </div>
+    <p id="feedSummary" class="muted"></p>
+    <table>
+      <thead><tr>
+        <th data-i18n="feed"></th><th data-i18n="status"></th><th data-i18n="articleCount"></th>
+        <th data-i18n="interval"></th><th data-i18n="lastSuccess"></th><th></th>
+      </tr></thead>
+      <tbody id="feedRows"></tbody>
+    </table>
+  </section>
+
+  <section id="tab-articles" hidden>
+    <div class="toolbar">
+      <select id="articleFeed"></select>
+    </div>
+    <div class="split">
+      <ul id="articleList"></ul>
+      <article id="articleView" class="card"></article>
+    </div>
+    <button type="button" id="moreBtn" hidden data-i18n="loadMore"></button>
+  </section>
+</main>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

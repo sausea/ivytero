@@ -152,6 +152,8 @@ async fn archives_full_history_with_stable_ids_and_pages() {
     let app = router(AppState {
         archive: archive.clone(),
         read_token: Arc::new(TOKEN.into()),
+        admin_token: None,
+        default_refresh_secs: 600,
     });
     let (status, info) = get_json(&app, "/api/v1/info", Some(TOKEN)).await;
     assert_eq!(status, StatusCode::OK);
@@ -210,6 +212,8 @@ async fn api_rejects_bad_auth_input_and_writes() {
     let app = router(AppState {
         archive,
         read_token: Arc::new(TOKEN.into()),
+        admin_token: None,
+        default_refresh_secs: 600,
     });
 
     let (status, body) = get_json(&app, "/api/v1/feeds", None).await;

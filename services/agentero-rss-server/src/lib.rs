@@ -6,4 +6,5 @@
 pub mod api;
 pub mod config;
 pub mod ingest;
+pub mod opml;
 pub mod storage;

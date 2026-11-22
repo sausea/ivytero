@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     environment:
       RSS_READ_TOKEN: ${RSS_READ_TOKEN:?set RSS_READ_TOKEN in .env}
+      # Optional: enables the /admin web UI.
+      RSS_ADMIN_TOKEN: ${RSS_ADMIN_TOKEN:-}
       RUST_LOG: info
     volumes:
       - rss-data:/data

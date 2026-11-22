@@ -1,5 +1,6 @@
 //! Read-only REST API (`/api/v1`). No endpoint mutates reader state.
 
+mod admin;
 mod articles;
 mod auth;
 mod feeds;
@@ -23,6 +24,10 @@ pub const MAX_LIMIT: usize = 200;
 pub struct AppState {
     pub archive: Archive,
     pub read_token: Arc<String>,
+    /// `None` keeps the admin UI and API switched off (404).
+    pub admin_token: Option<Arc<String>>,
+    /// Poll interval for feeds added from the admin UI.
+    pub default_refresh_secs: i64,
 }
 
 #[derive(Debug)]
@@ -151,10 +156,13 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             auth::require_read_token,
         ));
-    Router::new()
+    let mut root = Router::new()
         .route("/healthz", get(healthz))
-        .nest("/api/v1", v1)
-        .fallback(not_found)
+        .nest("/api/v1", v1);
+    if state.admin_token.is_some() {
+        root = root.merge(admin::routes(state.clone()));
+    }
+    root.fallback(not_found)
         .layer(middleware::from_fn(access_log))
         .with_state(state)
 }

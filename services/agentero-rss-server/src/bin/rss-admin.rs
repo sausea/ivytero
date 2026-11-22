@@ -3,6 +3,7 @@
 
 use agentero_core::features::paper::discovery::feeds::parse::normalize_feed_url;
 use agentero_rss_server::config::{db_path_from_env, default_refresh_from_env};
+use agentero_rss_server::opml;
 use agentero_rss_server::storage::{self, Archive};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -26,6 +27,16 @@ enum Command {
     Info,
     #[command(subcommand)]
     Feed(FeedCommand),
+    #[command(subcommand)]
+    Opml(OpmlCommand),
+}
+
+#[derive(Subcommand)]
+enum OpmlCommand {
+    /// Add every feed in an OPML file; existing URLs are skipped.
+    Import { file: PathBuf },
+    /// Print all feeds as OPML 2.0.
+    Export,
 }
 
 #[derive(Subcommand)]
@@ -84,6 +95,34 @@ fn run(cli: Cli) -> Result<(), String> {
                 "articles: {}",
                 storage::article_count(&conn).map_err(|e| e.to_string())?
             );
+        }
+        Command::Opml(OpmlCommand::Export) => {
+            let feeds = storage::list_feeds(&conn, false).map_err(|e| e.to_string())?;
+            print!("{}", opml::export(&feeds, &storage::now_rfc3339()));
+        }
+        Command::Opml(OpmlCommand::Import { file }) => {
+            let text = std::fs::read_to_string(&file).map_err(|e| e.to_string())?;
+            let interval = default_refresh_from_env()?;
+            let (mut added, mut skipped) = (0, 0);
+            for entry in opml::parse(&text)? {
+                let Ok(url) = normalize_feed_url(&entry.url) else {
+                    eprintln!("skip (invalid url): {}", entry.url);
+                    skipped += 1;
+                    continue;
+                };
+                let title = entry.title.unwrap_or_else(|| url.clone());
+                match storage::add_feed(&conn, &url, &title, interval) {
+                    Ok(feed) => {
+                        println!("{}\t{}", feed.id, feed.url);
+                        added += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("skip ({e})");
+                        skipped += 1;
+                    }
+                }
+            }
+            eprintln!("added {added}, skipped {skipped}");
         }
         Command::Feed(cmd) => match cmd {
             FeedCommand::Add {

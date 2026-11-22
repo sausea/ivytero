@@ -22,6 +22,7 @@ and switch the source to Cloud.
 | Variable | Default |
 |---|---|
 | `RSS_READ_TOKEN` | required, ≥ 24 chars |
+| `RSS_ADMIN_TOKEN` | unset = admin UI off; ≥ 24 chars, must differ from the read token |
 | `RSS_BIND` | `127.0.0.1:8787` |
 | `RSS_DB_PATH` | `rss-archive.sqlite` |
 | `RSS_DEFAULT_REFRESH_SECS` | `600` (120–86400) |
@@ -32,7 +33,17 @@ and switch the source to Cloud.
 
 ## Admin
 
-`agentero-rss-admin [--db PATH] info | feed add|list|disable|enable|set-interval|refresh`.
+### Web UI
+
+Set `RSS_ADMIN_TOKEN` and open `https://<host>/admin`. Sign in with that token
+(kept in the browser tab only). Feeds: add, rename, change interval,
+enable/disable, fetch now, OPML import/export. Articles: browse the archive by
+feed. The UI calls `/api/admin/*`, which only accepts the admin token; the
+desktop client keeps using the read-only `/api/v1` with `RSS_READ_TOKEN`.
+
+### CLI
+
+`agentero-rss-admin [--db PATH] info | feed add|list|disable|enable|set-interval|refresh | opml import FILE|export`.
 `disable` stops polling but keeps history and `feedId`; there is no delete.
 
 ## API

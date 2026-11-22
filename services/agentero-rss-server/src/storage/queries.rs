@@ -200,6 +200,18 @@ pub fn set_interval(conn: &Connection, id: &str, secs: i64) -> StorageResult<boo
     Ok(changed > 0)
 }
 
+pub fn set_title(conn: &Connection, id: &str, title: &str) -> StorageResult<bool> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(StorageError("title must not be empty".into()));
+    }
+    let changed = conn.execute(
+        "UPDATE feeds SET title = ?1 WHERE id = ?2",
+        params![title, id],
+    )?;
+    Ok(changed > 0)
+}
+
 /// Mark a feed due so the running scheduler polls it on its next tick.
 pub fn schedule_now(conn: &Connection, id: &str) -> StorageResult<bool> {
     let changed = conn.execute(

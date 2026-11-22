@@ -12,6 +12,8 @@ pub struct Config {
     pub bind: SocketAddr,
     pub db_path: PathBuf,
     pub read_token: String,
+    /// Enables `/admin` and `/api/admin` when set.
+    pub admin_token: Option<String>,
     pub default_refresh_secs: i64,
     pub concurrency: usize,
     pub fetch: FetchPolicy,
@@ -49,6 +51,17 @@ impl Config {
                 "RSS_READ_TOKEN must be at least {MIN_TOKEN_CHARS} characters"
             ));
         }
+        let admin_token = var("RSS_ADMIN_TOKEN");
+        if let Some(admin) = &admin_token {
+            if admin.chars().count() < MIN_TOKEN_CHARS {
+                return Err(format!(
+                    "RSS_ADMIN_TOKEN must be at least {MIN_TOKEN_CHARS} characters"
+                ));
+            }
+            if *admin == read_token {
+                return Err("RSS_ADMIN_TOKEN must differ from RSS_READ_TOKEN".into());
+            }
+        }
         let bind = parsed("RSS_BIND", SocketAddr::from(([127, 0, 0, 1], 8787)))?;
         let fetch = FetchPolicy {
             max_bytes: parsed("RSS_MAX_FETCH_BYTES", 2 * 1024 * 1024)?,
@@ -60,6 +73,7 @@ impl Config {
             bind,
             db_path: db_path_from_env(),
             read_token,
+            admin_token,
             default_refresh_secs: default_refresh_from_env()?,
             concurrency: parsed("RSS_FETCH_CONCURRENCY", 4usize)?.max(1),
             fetch,
