@@ -763,7 +763,7 @@
 		"menusHint": "Only configured providers are listed here. If Paddle or MinerU is missing, configure it below and save — it becomes selectable once the check passes.",
 		"autoParse": {
 			"label": "Auto-parse on import / open",
-			"help": "Queue layout analysis automatically when papers are imported or opened. Off by default — parse manually from the Figures panel or the paper doctor to keep CPU free."
+			"help": "Queue layout analysis and body parsing (PAPER.md) automatically when papers are imported or opened. Off by default — parse manually from the Figures panel or the paper doctor to keep CPU free."
 		},
 		"providerConfig": {
 			"section": "Provider settings",
