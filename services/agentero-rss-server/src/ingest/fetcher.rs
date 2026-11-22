@@ -21,6 +21,8 @@ pub struct FetchPolicy {
     pub connect_timeout: Duration,
     /// Only for tests / trusted intranets: permits loopback and private targets.
     pub allow_private_networks: bool,
+    /// Permits only 198.18.0.0/15, which TUN proxies hand out as fake-ip DNS answers.
+    pub allow_fake_ip: bool,
     pub user_agent: String,
 }
 
@@ -31,6 +33,7 @@ impl Default for FetchPolicy {
             timeout: Duration::from_secs(20),
             connect_timeout: Duration::from_secs(10),
             allow_private_networks: false,
+            allow_fake_ip: false,
             user_agent: format!("agentero-rss-server/{}", env!("CARGO_PKG_VERSION")),
         }
     }
@@ -93,6 +96,23 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
     }
 }
 
+/// 198.18.0.0/15, also when written as an IPv4-mapped IPv6 address.
+pub fn is_fake_ip(ip: IpAddr) -> bool {
+    let v4 = match ip {
+        IpAddr::V4(v4) => v4,
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4,
+            None => return false,
+        },
+    };
+    let o = v4.octets();
+    o[0] == 198 && (o[1] & 0xfe) == 18
+}
+
+fn address_allowed(ip: IpAddr, policy: &FetchPolicy) -> bool {
+    policy.allow_private_networks || is_public_ip(ip) || (policy.allow_fake_ip && is_fake_ip(ip))
+}
+
 fn is_public_v4(ip: Ipv4Addr) -> bool {
     let o = ip.octets();
     !(ip.is_loopback()
@@ -151,13 +171,11 @@ async fn resolve_checked(
     let first = *addrs
         .first()
         .ok_or_else(|| FetchError::Network("dns: no address".into()))?;
-    if !policy.allow_private_networks {
-        if let Some(bad) = addrs.iter().find(|a| !is_public_ip(a.ip())) {
-            return Err(FetchError::Blocked(format!(
-                "non-public address {}",
-                bad.ip()
-            )));
-        }
+    if let Some(bad) = addrs.iter().find(|a| !address_allowed(a.ip(), policy)) {
+        return Err(FetchError::Blocked(format!(
+            "non-public address {}",
+            bad.ip()
+        )));
     }
     Ok(first)
 }
@@ -272,6 +290,30 @@ pub async fn fetch(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fake_ip_switch_only_opens_198_18() {
+        let policy = FetchPolicy {
+            allow_fake_ip: true,
+            ..FetchPolicy::default()
+        };
+        for ip in ["198.18.0.42", "198.19.255.1", "::ffff:198.18.5.128"] {
+            let ip: IpAddr = ip.parse().unwrap();
+            assert!(!address_allowed(ip, &FetchPolicy::default()), "{ip}");
+            assert!(address_allowed(ip, &policy), "{ip}");
+        }
+        for ip in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "198.20.0.1",
+            "fdfe:dcba:9876::1",
+        ] {
+            let ip: IpAddr = ip.parse().unwrap();
+            assert!(!address_allowed(ip, &policy), "{ip}");
+        }
+    }
 
     #[test]
     fn blocks_internal_addresses() {

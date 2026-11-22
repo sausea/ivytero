@@ -30,6 +30,7 @@ and switch the source to Cloud.
 | `RSS_FETCH_TIMEOUT_SECS` | `20` |
 | `RSS_MAX_FETCH_BYTES` | `2097152` |
 | `RSS_ALLOW_PRIVATE_NETWORKS` | `false` |
+| `RSS_ALLOW_FAKE_IP` | `false`; `true` allows only `198.18.0.0/15`, for hosts behind a TUN proxy in fake-ip DNS mode |
 
 ## Admin
 

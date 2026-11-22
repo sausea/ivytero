@@ -67,6 +67,7 @@ impl Config {
             max_bytes: parsed("RSS_MAX_FETCH_BYTES", 2 * 1024 * 1024)?,
             timeout: Duration::from_secs(parsed("RSS_FETCH_TIMEOUT_SECS", 20)?),
             allow_private_networks: parsed("RSS_ALLOW_PRIVATE_NETWORKS", false)?,
+            allow_fake_ip: parsed("RSS_ALLOW_FAKE_IP", false)?,
             ..FetchPolicy::default()
         };
         Ok(Self {
