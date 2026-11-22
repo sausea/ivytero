@@ -8,7 +8,75 @@ pub fn html_to_markdown(html: &str) -> String {
     let (processed, math_blocks) = extract_latex_math(html);
     let md = htmd::convert(&processed).unwrap_or_else(|_| strip_html(&processed));
     let restored = restore_latex_math(&md, &math_blocks);
-    restored.replace('\u{200b}', "").trim().to_string()
+    let restored = restored.replace('\u{200b}', "").trim().to_string();
+    // The fallback re-derives paragraphs from the source HTML, so it must not
+    // run when LaTeX placeholders are still waiting to be restored.
+    if math_blocks.is_empty() {
+        paragraphize_fallback(&restored, html)
+    } else {
+        restored
+    }
+}
+
+/// Block-level break hints that become paragraph breaks when a feed body has
+/// no `<p>` markup and htmd collapses it into one long line.
+const PARAGRAPH_BREAKS: &[&str] = &[
+    "<br", "</p", "</div", "</li", "</ul", "</ol", "</h1", "</h2", "</h3", "</h4", "</h5",
+    "</h6", "</blockquote", "</pre", "</tr", "</section", "</article", "\n\n",
+];
+
+/// Feeds without `<p>` markup (br/div separated, or plain text with blank
+/// lines) convert to one long line. Re-split into paragraphs from the
+/// source's break hints so the detail page reads normally.
+fn paragraphize_fallback(md: &str, html: &str) -> String {
+    if md.contains("\n\n") || md.chars().count() < 120 {
+        return md.to_string();
+    }
+    let lower = html.to_ascii_lowercase();
+    if !PARAGRAPH_BREAKS.iter().any(|h| lower.contains(h)) {
+        return md.to_string();
+    }
+    let bytes = html.as_bytes();
+    let mut segments: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let mut advanced = false;
+        if bytes[i] == b'<' || bytes[i] == b'\n' {
+            for hint in PARAGRAPH_BREAKS {
+                if !lower[i..].starts_with(hint) {
+                    continue;
+                }
+                let end = if *hint == "\n\n" {
+                    i + 2
+                } else {
+                    match lower[i..].find('>') {
+                        Some(gt) => i + gt + 1,
+                        None => bytes.len(),
+                    }
+                };
+                segments.push(&html[start..i]);
+                i = end;
+                start = i;
+                advanced = true;
+                break;
+            }
+        }
+        if !advanced {
+            i += 1;
+        }
+    }
+    segments.push(&html[start..]);
+    let paras: Vec<String> = segments
+        .iter()
+        .map(|seg| strip_html(seg))
+        .filter(|text| !text.is_empty())
+        .collect();
+    if paras.len() >= 2 {
+        paras.join("\n\n")
+    } else {
+        md.to_string()
+    }
 }
 
 /// LaTeX block environments to preserve (equation, align, aligned, etc.).
@@ -477,6 +545,34 @@ mod tests {
     fn readability_returns_empty_on_degenerate_input() {
         assert_eq!(extract_article_html("", None), "");
         assert_eq!(extract_article_html("<html><body></body></html>", None), "");
+    }
+
+    #[test]
+    fn paragraphizes_br_separated_feed_body() {
+        let html = "First paragraph explores the model with enough words to pass the length gate easily and reads like real content.<br><br>Second paragraph continues the story with more detail and substance for the reader.<br><br>Third paragraph wraps up the article nicely with a conclusion.";
+        let md = html_to_markdown(html);
+        assert!(md.contains("\n\n"), "{md}");
+    }
+
+    #[test]
+    fn paragraphizes_plain_text_blank_lines() {
+        let html = "First paragraph with enough words to pass the length gate for sure and then some more.\n\nSecond paragraph follows after a blank line in the source text body.";
+        let md = html_to_markdown(html);
+        assert!(md.contains("\n\n"), "{md}");
+    }
+
+    #[test]
+    fn paragraphizes_div_separated_feed_body() {
+        let html = "<div>First paragraph explores the model with enough words to pass the length gate easily and reads like real content.</div><div>Second paragraph continues the story with more detail and substance for the reader.</div>";
+        let md = html_to_markdown(html);
+        assert!(md.contains("\n\n"), "{md}");
+    }
+
+    #[test]
+    fn keeps_existing_paragraphs_untouched() {
+        let html = "<p>First paragraph with enough words to pass the length gate for sure and then some more.</p><p>Second paragraph follows here with more substance and detail.</p>";
+        let md = html_to_markdown(html);
+        assert!(md.contains("\n\n"), "{md}");
     }
 
     #[test]
