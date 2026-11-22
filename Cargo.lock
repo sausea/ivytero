@@ -273,6 +273,7 @@ dependencies = [
  "http-body-util",
  "log",
  "reqwest 0.12.28",
+ "roxmltree",
  "rusqlite",
  "serde",
  "serde_json",
