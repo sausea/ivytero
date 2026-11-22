@@ -1276,5 +1276,12 @@
 		"noCitations": "Insert a citation before adding a bibliography.",
 		"permission": "Allow Agentero to control Microsoft Word in macOS System Settings → Privacy & Security → Automation.",
 		"failed": "Word integration failed: {{detail}}"
+	},
+	"rssAnalysis": {
+		"section": "RSS AI analysis",
+		"baseUrl": "Base URL",
+		"baseUrlHint": "OpenAI-compatible API root, e.g. https://api.openai.com/v1",
+		"apiKey": "API Key",
+		"model": "Model"
 	}
 }

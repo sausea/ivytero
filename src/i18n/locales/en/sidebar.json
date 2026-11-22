@@ -383,6 +383,7 @@
 			"bookmarkTarget": "{{vault}} / {{path}}",
 			"bookmarkConfirm": "Bookmark",
 			"bookmarkSaved": "Saved to {{path}}",
+			"analysisFailed": "AI analysis failed",
 			"bookmarkOpen": "Open note",
 			"bookmarkRemove": "Remove",
 			"bookmarkRemoveConfirm": "Confirm removal"

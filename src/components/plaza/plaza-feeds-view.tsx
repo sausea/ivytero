@@ -91,6 +91,7 @@ import {
 } from "@/lib/plaza/mention-open";
 import {
 	bookmarkToFeedItem,
+	maybeRssDailyAnalyze,
 	type RssBookmark,
 	rssDailyBookmark,
 	rssDailyList,
@@ -950,6 +951,16 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				});
 				setBookmarks((prev) => new Map(prev).set(item.id, result.bookmark));
 				setBookmarkTarget(null);
+				if (result.bookmark.aiStatus === "not_started") {
+					void maybeRssDailyAnalyze({
+						vaultPath: vault,
+						source,
+						item: full,
+						bookmark: result.bookmark,
+					}).catch((error) => {
+						notifyError(errorText(error) || t("plaza.feeds.analysisFailed"));
+					});
+				}
 				if (result.created) {
 					notifySuccess(
 						t("plaza.feeds.bookmarkSaved", { path: result.bookmark.notePath }),

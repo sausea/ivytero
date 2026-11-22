@@ -12,6 +12,7 @@ import {
 	type RssBookmarkResult,
 } from "@/lib/core/bindings";
 import { callApi } from "@/lib/core/ipc";
+import { loadSettings } from "@/lib/settings/store";
 
 export type { RssBookmark };
 
@@ -71,6 +72,42 @@ export async function rssDailyBookmark(args: {
 				},
 			}),
 		{ fallback: "feeds.bookmarkFailed" },
+	);
+}
+
+/**
+ * Kick off AI analysis for a bookmarked article when the RSS analysis
+ * endpoint is configured and the entry has not been analyzed yet. Runs in
+ * the background; the daily note entry is updated by the Host.
+ */
+export async function maybeRssDailyAnalyze(args: {
+	vaultPath: string;
+	source: FeedSource;
+	item: FeedItem;
+	bookmark: RssBookmark;
+}): Promise<void> {
+	const cfg = loadSettings().rssAnalysis;
+	if (!cfg?.baseUrl.trim() || !cfg.apiKey.trim() || !cfg.model.trim()) return;
+	if (args.bookmark.aiStatus !== "not_started") return;
+	const text =
+		args.item.bodyMarkdown?.trim() || args.item.summaryText?.trim() || "";
+	if (!text) return;
+	await callApi(
+		() =>
+			commands.rssDailyAnalyze({
+				vaultPath: args.vaultPath,
+				source: args.source,
+				articleId: args.item.id,
+				title: args.item.title,
+				feedTitle: args.item.subscriptionTitle,
+				text,
+				config: {
+					baseUrl: cfg.baseUrl,
+					apiKey: cfg.apiKey,
+					model: cfg.model,
+				},
+			}),
+		{ fallback: "feeds.analysisFailed" },
 	);
 }
 

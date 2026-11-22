@@ -1276,5 +1276,12 @@
 		"noCitations": "请先插入引文，再添加参考文献。",
 		"permission": "请在 macOS 系统设置 → 隐私与安全性 → 自动化中，允许 Agentero 控制 Microsoft Word。",
 		"failed": "Word 集成失败：{{detail}}"
+	},
+	"rssAnalysis": {
+		"section": "RSS AI 分析",
+		"baseUrl": "接口地址",
+		"baseUrlHint": "OpenAI 兼容 API 根地址，如 https://api.openai.com/v1",
+		"apiKey": "API Key",
+		"model": "模型"
 	}
 }

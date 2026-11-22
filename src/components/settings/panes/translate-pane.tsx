@@ -12,6 +12,7 @@ import {
 	AgentModelSelects,
 	useAgentModelCatalog,
 } from "@/components/settings/agent-model-picker";
+import { RssAnalysisBlock } from "@/components/settings/panes/rss-analysis-block";
 import {
 	PROVIDER_INPUT_CLASS,
 	ProbeDot,
@@ -1160,6 +1161,7 @@ export function TranslatePane({
 					) : null}
 				</>
 			)}
+			<RssAnalysisBlock settings={settings} patch={patch} />
 		</>
 	);
 }

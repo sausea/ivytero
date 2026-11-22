@@ -382,6 +382,7 @@
 			"bookmarkTarget": "{{vault}} / {{path}}",
 			"bookmarkConfirm": "确认收藏",
 			"bookmarkSaved": "已保存到 {{path}}",
+			"analysisFailed": "AI 分析失败",
 			"bookmarkOpen": "打开笔记",
 			"bookmarkRemove": "移除",
 			"bookmarkRemoveConfirm": "确认移除"

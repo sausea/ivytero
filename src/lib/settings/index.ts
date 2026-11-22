@@ -54,6 +54,7 @@ export type {
 	PdfScrollStrategy,
 	PdfSpreadMode,
 	PdfTranslateTabMode,
+	RssAnalysisSettings,
 	ThemePreference,
 	TranslateProviderConfig,
 	TranslateProviderId,
