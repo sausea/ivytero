@@ -41,6 +41,8 @@ pub struct ArticleRow {
     pub feed_title: String,
     pub guid: String,
     pub title: String,
+    /// zh-CN title from the background translator; `None` when not needed yet.
+    pub title_translated: Option<String>,
     pub url: Option<String>,
     pub published_at: Option<String>,
     pub first_seen_at: String,
@@ -88,7 +90,8 @@ const FEED_COLUMNS: &str =
     (SELECT COUNT(*) FROM articles a WHERE a.feed_id = f.id)";
 
 const ARTICLE_COLUMNS: &str = "a.id, a.feed_id, f.title, a.guid, a.title, a.url, a.published_at,
-    a.first_seen_at, a.sort_at, a.summary_text, a.content_html, a.paper_url, a.updated_at";
+    a.first_seen_at, a.sort_at, a.summary_text, a.content_html, a.paper_url, a.updated_at,
+    CASE WHEN a.title_translated_source = a.title THEN a.title_translated END";
 
 fn map_feed(row: &Row<'_>) -> rusqlite::Result<FeedRow> {
     Ok(FeedRow {
@@ -124,6 +127,7 @@ fn map_article(row: &Row<'_>) -> rusqlite::Result<ArticleRow> {
         content_html: row.get(10)?,
         paper_url: row.get(11)?,
         updated_at: row.get(12)?,
+        title_translated: row.get(13)?,
     })
 }
 
@@ -488,6 +492,38 @@ pub fn list_articles(
         }
     }
     Ok((rows, has_more))
+}
+
+/// Articles whose title has not been considered by the translator, newest first.
+pub fn pending_title_translations(
+    conn: &Connection,
+    limit: usize,
+) -> StorageResult<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title FROM articles
+         WHERE title_translated_source IS NULL OR title_translated_source <> title
+         ORDER BY sort_at DESC, id DESC LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map([limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Store a translation (or `None` = nothing to translate) for `source_title`;
+/// ignored when the feed changed the title meanwhile.
+pub fn set_title_translation(
+    conn: &Connection,
+    id: &str,
+    source_title: &str,
+    translated: Option<&str>,
+) -> StorageResult<bool> {
+    let changed = conn.execute(
+        "UPDATE articles SET title_translated = ?1, title_translated_source = ?2
+         WHERE id = ?3 AND title = ?2",
+        params![translated, source_title, id],
+    )?;
+    Ok(changed > 0)
 }
 
 pub fn get_article(conn: &Connection, id: &str) -> StorageResult<Option<ArticleRow>> {
