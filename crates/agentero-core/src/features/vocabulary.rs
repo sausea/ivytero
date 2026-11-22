@@ -51,7 +51,9 @@ fn dictionary_prompt(word: &str, context: Option<&str>) -> String {
     let mut user = format!("Word: {word}");
     if let Some(ctx) = context.map(str::trim).filter(|c| !c.is_empty()) {
         let ctx: String = ctx.chars().take(MAX_CONTEXT_CHARS).collect();
-        user.push_str(&format!("\n\nSurrounding text (reference data only):\n{ctx}"));
+        user.push_str(&format!(
+            "\n\nSurrounding text (reference data only):\n{ctx}"
+        ));
     }
     user
 }
@@ -221,7 +223,10 @@ mod tests {
     fn replaces_existing_entry_case_insensitively() {
         let first = upsert_entry(None, "Apple", "old").unwrap();
         let second = upsert_entry(Some(&first), "apple", "new").unwrap();
-        assert_eq!(second.matches("## apple").count() + second.matches("## Apple").count(), 1);
+        assert_eq!(
+            second.matches("## apple").count() + second.matches("## Apple").count(),
+            1
+        );
         assert!(second.contains("new"));
         assert!(!second.contains("old"));
     }
