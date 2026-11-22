@@ -5,6 +5,7 @@ use super::{now_rfc3339, StorageError, StorageResult};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 pub const MIN_REFRESH_SECS: i64 = 120;
@@ -27,6 +28,9 @@ pub struct FeedRow {
     pub failure_count: i64,
     pub last_error: Option<String>,
     pub article_count: i64,
+    /// Articles first seen after the requested `newSince`, when asked for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -101,6 +105,7 @@ fn map_feed(row: &Row<'_>) -> rusqlite::Result<FeedRow> {
         failure_count: row.get(10)?,
         last_error: row.get(11)?,
         article_count: row.get(12)?,
+        new_count: None,
     })
 }
 
@@ -176,6 +181,17 @@ pub fn list_feeds(conn: &Connection, enabled_only: bool) -> StorageResult<Vec<Fe
     let rows = stmt
         .query_map([], map_feed)?
         .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Per feed, how many articles the archive first saw after `since`.
+pub fn new_counts(conn: &Connection, since: &str) -> StorageResult<HashMap<String, i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT feed_id, COUNT(*) FROM articles WHERE first_seen_at > ?1 GROUP BY feed_id",
+    )?;
+    let rows = stmt
+        .query_map([since], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<HashMap<_, _>, _>>()?;
     Ok(rows)
 }
 
@@ -440,6 +456,7 @@ pub fn list_articles(
     conn: &Connection,
     feed_id: Option<&str>,
     after: Option<(&str, &str)>,
+    new_since: Option<&str>,
     limit: usize,
     include_content: bool,
 ) -> StorageResult<(Vec<ArticleRow>, bool)> {
@@ -448,6 +465,7 @@ pub fn list_articles(
          FROM articles a JOIN feeds f ON f.id = a.feed_id
          WHERE (?1 IS NULL OR a.feed_id = ?1)
            AND (?2 IS NULL OR a.sort_at < ?2 OR (a.sort_at = ?2 AND a.id < ?3))
+           AND (?5 IS NULL OR a.first_seen_at > ?5)
          ORDER BY a.sort_at DESC, a.id DESC
          LIMIT ?4"
     );
@@ -458,7 +476,7 @@ pub fn list_articles(
     let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt
         .query_map(
-            params![feed_id, sort_at, id, (limit + 1) as i64],
+            params![feed_id, sort_at, id, (limit + 1) as i64, new_since],
             map_article,
         )?
         .collect::<Result<Vec<_>, _>>()?;

@@ -59,11 +59,12 @@ pub async fn list(
         .map(|s| decode_cursor(s))
         .transpose()?;
     let feed_id = q.get("feedId").filter(|s| !s.is_empty()).cloned();
+    let since = super::new_since(&q)?;
     let (items, has_more) = state
         .archive
         .run(move |c| {
             let after = cursor.as_ref().map(|(s, i)| (s.as_str(), i.as_str()));
-            storage::list_articles(c, feed_id.as_deref(), after, limit, false)
+            storage::list_articles(c, feed_id.as_deref(), after, since.as_deref(), limit, false)
         })
         .await?;
     let next_cursor = if has_more {

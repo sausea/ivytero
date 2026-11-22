@@ -128,7 +128,7 @@ async fn archives_full_history_with_stable_ids_and_pages() {
     // Origin drops "a" and edits "b": history keeps "a", "b" keeps its id.
     let first_ids: Vec<(String, String)> = archive
         .run(|c| {
-            Ok(storage::list_articles(c, None, None, 10, false)?
+            Ok(storage::list_articles(c, None, None, None, 10, false)?
                 .0
                 .into_iter()
                 .map(|a| (a.guid, a.id))
@@ -203,6 +203,33 @@ async fn archives_full_history_with_stable_ids_and_pages() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(feeds["items"][0]["articleCount"], 4);
     assert!(feeds["items"][0].get("etag").is_none());
+    assert!(feeds["items"][0].get("newCount").is_none());
+
+    // newSince is a pure filter: counts and pages articles first seen later.
+    let server_time = info["serverTime"].as_str().unwrap().to_string();
+    let (_, feeds) = get_json(
+        &app,
+        &format!("/api/v1/feeds?newSince={server_time}"),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(feeds["items"][0]["newCount"], 0);
+    let (_, feeds) = get_json(
+        &app,
+        "/api/v1/feeds?newSince=2000-01-01T00:00:00Z",
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(feeds["items"][0]["newCount"], 4);
+    let (_, page) = get_json(
+        &app,
+        &format!("/api/v1/articles?newSince={server_time}"),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(page["items"].as_array().unwrap().len(), 0);
+    let (status, _) = get_json(&app, "/api/v1/articles?newSince=yesterday", Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

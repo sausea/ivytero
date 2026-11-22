@@ -19,9 +19,19 @@ pub async fn list(
         Some("true") => true,
         Some(_) => return Err(ApiError::bad_request("enabled must be true or false")),
     };
+    let since = super::new_since(&q)?;
     let items = state
         .archive
-        .run(move |c| storage::list_feeds(c, enabled_only))
+        .run(move |c| {
+            let mut feeds = storage::list_feeds(c, enabled_only)?;
+            if let Some(since) = since {
+                let counts = storage::new_counts(c, &since)?;
+                for f in &mut feeds {
+                    f.new_count = Some(counts.get(&f.id).copied().unwrap_or(0));
+                }
+            }
+            Ok(feeds)
+        })
         .await?;
     Ok(Json(FeedList { items }))
 }

@@ -102,6 +102,8 @@ struct Capabilities {
 struct Info {
     api_version: u32,
     server_id: String,
+    /// Archive clock, comparable with `firstSeenAt` and `newSince`.
+    server_time: String,
     capabilities: Capabilities,
 }
 
@@ -110,12 +112,23 @@ async fn info(State(state): State<AppState>) -> ApiResult<Info> {
     Ok(Json(Info {
         api_version: API_VERSION,
         server_id,
+        server_time: crate::storage::now_rfc3339(),
         capabilities: Capabilities {
             history_pagination: true,
             full_web_page: false,
             user_state: false,
         },
     }))
+}
+
+/// Optional `newSince` (RFC 3339): a pure read filter, nothing is recorded.
+fn new_since(q: &std::collections::HashMap<String, String>) -> Result<Option<String>, ApiError> {
+    match q.get("newSince").filter(|s| !s.is_empty()) {
+        None => Ok(None),
+        Some(raw) => crate::storage::canonical_time(Some(raw))
+            .map(Some)
+            .ok_or_else(|| ApiError::bad_request("newSince must be an RFC 3339 time")),
+    }
 }
 
 async fn healthz() -> &'static str {

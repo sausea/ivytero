@@ -50,16 +50,6 @@ async fn app_css() -> Response {
     asset(APP_CSS, "text/css; charset=utf-8")
 }
 
-#[derive(Serialize)]
-struct FeedList {
-    items: Vec<FeedRow>,
-}
-
-async fn list_feeds(State(state): State<AppState>) -> ApiResult<FeedList> {
-    let items = state.archive.run(|c| storage::list_feeds(c, false)).await?;
-    Ok(Json(FeedList { items }))
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddFeed {
@@ -318,7 +308,7 @@ async fn export_opml(State(state): State<AppState>) -> Result<Response, ApiError
 pub fn routes(state: AppState) -> Router<AppState> {
     let api = Router::new()
         .route("/info", get(info))
-        .route("/feeds", get(list_feeds).post(add_feed))
+        .route("/feeds", get(super::feeds::list).post(add_feed))
         .route("/feeds/batch", post(batch))
         .route("/feeds/{feed_id}", axum::routing::patch(patch_feed))
         .route("/feeds/{feed_id}/refresh", post(refresh_feed))

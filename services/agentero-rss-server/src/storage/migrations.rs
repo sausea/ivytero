@@ -102,6 +102,9 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
     if !has_folder {
         tx.execute_batch("ALTER TABLE feeds ADD COLUMN folder TEXT NOT NULL DEFAULT ''")?;
     }
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_articles_feed_first_seen ON articles(feed_id, first_seen_at)",
+    )?;
     tx.execute(
         "INSERT OR IGNORE INTO meta (key, value) VALUES ('server_id', ?1)",
         params![Uuid::new_v4().to_string()],
