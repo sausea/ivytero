@@ -96,12 +96,15 @@ export type LayoutSettings = {
 	backend: LayoutBackend;
 	parserBackend: ParserBackend;
 	providerConfigs: Partial<Record<LayoutProviderId, LayoutProviderConfig>>;
+	/** Queue layout analysis when a paper is imported or opened. Default off: parsing stays manual. */
+	autoParse: boolean;
 };
 
 export const DEFAULT_LAYOUT_SETTINGS: LayoutSettings = {
 	backend: "local",
 	parserBackend: "local",
 	providerConfigs: {},
+	autoParse: false,
 };
 
 /** Docs / console pages for obtaining keys (settings UI external link). */

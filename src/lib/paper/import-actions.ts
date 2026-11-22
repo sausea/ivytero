@@ -746,7 +746,7 @@ export async function runLocalPdfImportJob(
 			// run against the paper's final (post-rename) path.
 			continue;
 		}
-		if (paper.paperDir) {
+		if (paper.paperDir && getSettings().layout.autoParse) {
 			enqueuePaperLayoutAnalysis({
 				paperAbsPath: paper.paperDir.replace(/[\\/]+$/, ""),
 				paperLabel: paper.title?.trim() || paper.path,

@@ -275,6 +275,20 @@ export function LayoutPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow
+					label={t("layout.autoParse.label")}
+					htmlFor="layout-auto-parse"
+					description={t("layout.autoParse.help")}
+				>
+					<Switch
+						id="layout-auto-parse"
+						size="sm"
+						checked={layout.autoParse}
+						onCheckedChange={(checked) =>
+							patch({ layout: { ...layout, autoParse: checked === true } })
+						}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 
 			{noProviderReady ? (

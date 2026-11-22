@@ -561,6 +561,10 @@ pub struct LayoutSettings {
     pub parser_backend: String,
     #[serde(default)]
     pub provider_configs: HashMap<String, LayoutProviderConfig>,
+    /// Queue layout analysis when a paper is imported or opened. Default
+    /// false: parsing is manual (toolbar / 论文补齐) to keep CPU free.
+    #[serde(default)]
+    pub auto_parse: bool,
 }
 
 impl Default for LayoutSettings {
@@ -569,6 +573,7 @@ impl Default for LayoutSettings {
             backend: default_layout_backend(),
             parser_backend: default_parser_backend(),
             provider_configs: HashMap::new(),
+            auto_parse: false,
         }
     }
 }

@@ -4210,6 +4210,11 @@ export type LayoutSettings = {
 	 */
 	parserBackend?: string,
 	providerConfigs?: { [key in string]: LayoutProviderConfig },
+	/**
+	 *  Queue layout analysis when a paper is imported or opened. Default
+	 *  false: parsing is manual (toolbar / 论文补齐) to keep CPU free.
+	 */
+	autoParse?: boolean,
 };
 
 export type LayoutTranslateCacheWriteArgs = {

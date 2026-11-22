@@ -922,6 +922,9 @@ function normalizeLayoutSettings(
 	if (isParserBackend(raw.parserBackend)) {
 		base.parserBackend = raw.parserBackend;
 	}
+	if (typeof raw.autoParse === "boolean") {
+		base.autoParse = raw.autoParse;
+	}
 	base.providerConfigs = normalizeLayoutProviderConfigs(
 		(raw as { providerConfigs?: unknown }).providerConfigs,
 	);

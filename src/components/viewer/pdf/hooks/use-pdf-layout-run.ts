@@ -35,6 +35,7 @@ import {
 	layoutSidecarNeedsViewerReload,
 	layoutSidecarPath,
 } from "@/lib/pdf/layout/io";
+import { getSettings } from "@/lib/settings/react-store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { listenVaultFileChangedGated } from "@/lib/vault/file-change-gate";
 import type { VaultFileChangedPayload } from "@/lib/vault/fs-watch";
@@ -336,6 +337,7 @@ export function usePdfLayoutRun({
 	// inherit layout from the source pane / store copy — do not re-queue.
 	useEffect(() => {
 		if (translationPane || isRemotePaper || !paperAbsPath) return;
+		if (!getSettings().layout.autoParse) return;
 		enqueuePaperLayoutAnalysis({ paperAbsPath });
 	}, [translationPane, isRemotePaper, paperAbsPath]);
 
