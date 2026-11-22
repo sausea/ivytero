@@ -93,6 +93,31 @@ pub fn marks(
     Ok(out)
 }
 
+/// Lower bound for an unread-only scan: the watermark, or just before the
+/// oldest article explicitly marked unread so it is not filtered out.
+pub fn unread_scan_since(
+    conn: &Connection,
+    server_id: &str,
+    since: &str,
+    feed_id: Option<&str>,
+) -> Result<String, AppError> {
+    let oldest: Option<String> = conn.query_row(
+        "SELECT MIN(first_seen_at) FROM cloud_read_marks
+         WHERE server_id = ?1 AND read = 0 AND (?2 IS NULL OR feed_id = ?2)",
+        params![server_id, feed_id],
+        |r| r.get(0),
+    )?;
+    let Some(oldest) = oldest.filter(|o| o.as_str() <= since) else {
+        return Ok(since.to_string());
+    };
+    Ok(chrono::DateTime::parse_from_rfc3339(&oldest)
+        .map(|t| {
+            (t.with_timezone(&chrono::Utc) - chrono::Duration::milliseconds(1))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        })
+        .unwrap_or_else(|_| since.to_string()))
+}
+
 /// `read_at` shown for an article: the mark time, the watermark, or unread.
 pub fn read_at(since: &str, first_seen_at: &str, mark: Option<&(bool, String)>) -> Option<String> {
     match mark {
@@ -231,10 +256,16 @@ mod tests {
                 .as_deref(),
             Some(NOW)
         );
+        assert_eq!(unread_scan_since(&conn, SID, T0, None).unwrap(), T0);
         assert_eq!(
             set_read(&conn, SID, T0, &art("o1", OLD), false, NOW).unwrap(),
             None
         );
+        assert_eq!(
+            unread_scan_since(&conn, SID, T0, Some("f")).unwrap(),
+            "2025-12-31T23:59:59.999Z"
+        );
+        assert_eq!(unread_scan_since(&conn, SID, T0, Some("g")).unwrap(), T0);
         let counts = unread_counts(&conn, SID, T0, &HashMap::from([("f".into(), 3)])).unwrap();
         assert_eq!(counts["f"], 3);
         let m = marks(&conn, SID, &["n1", "o1", "x"]).unwrap();

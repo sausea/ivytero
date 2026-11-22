@@ -423,7 +423,13 @@ pub async fn items(
         query.push(("feedId", id.to_string()));
     }
     if unread_only {
-        query.push(("newSince", since.clone()));
+        let scan_since = cloud_reads::unread_scan_since(
+            &cloud_reads::open()?,
+            &server_id,
+            &since,
+            feed_id.filter(|s| !s.is_empty()),
+        )?;
+        query.push(("newSince", scan_since));
     }
     let mut cursor = cursor.filter(|s| !s.is_empty()).map(str::to_string);
     for _ in 0..MAX_UNREAD_SCAN_PAGES {
