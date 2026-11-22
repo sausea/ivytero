@@ -16,9 +16,13 @@ import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf/cards/selection-card";
 import { isEditableClipboardTarget } from "@/components/viewer/pdf/host-dom";
 import type { CardScreenPoint } from "@/components/viewer/pdf/types";
-import { useSettings } from "@/hooks/use-app-stores";
+import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
 import { useTypewriter } from "@/hooks/use-typewriter";
+import { commands } from "@/lib/core/bindings";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
+import { callApi } from "@/lib/core/ipc";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isDictionaryLookup } from "@/lib/translate/dictionary";
 import type { SelectionTranslateMode } from "@/lib/translate/types";
 
@@ -73,7 +77,7 @@ export function TranslateCard({
 	mode: requestedMode,
 	onModeChange,
 }: TranslateCardProps) {
-	const { t } = useTranslation("viewer");
+	const { t, i18n } = useTranslation("viewer");
 	// A completed click elsewhere on the page dismisses the result (default).
 	// Settings → Translate can keep the card always visible instead; scrolling
 	// and page turns never close it either way (see SelectionCard's outside
@@ -81,6 +85,9 @@ export function TranslateCard({
 	const alwaysShowCard = useSettings(
 		(s) => s.translate.alwaysShowTranslateCard,
 	);
+	const vocabulary = useSettings((s) => s.vocabulary);
+	const targetLang = useSettings((s) => s.translate.targetLang);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const mode =
 		requestedMode ??
 		(isDictionaryLookup(sourceText ?? "") ? "dictionary" : "translate");
@@ -98,6 +105,58 @@ export function TranslateCard({
 	/** scrollTop we wrote ourselves; its scroll event is not a reader scroll. */
 	const followWriteRef = useRef<number | null>(null);
 	const [copied, setCopied] = useState(false);
+	const [vocabState, setVocabState] = useState<"idle" | "adding" | "added">(
+		"idle",
+	);
+
+	const addToVocabulary = useCallback(async () => {
+		const word = (sourceText ?? "").trim();
+		if (!word || vocabState === "adding" || !vaultPath) return;
+		if (
+			!vocabulary.baseUrl.trim() ||
+			!vocabulary.apiKey.trim() ||
+			!vocabulary.model.trim()
+		) {
+			notifyError(t("selection.vocabularyUnconfigured"));
+			return;
+		}
+		setVocabState("adding");
+		try {
+			const resolvedLang =
+				targetLang === "ui"
+					? i18n.language.startsWith("zh")
+						? "zh-CN"
+						: "en"
+					: targetLang;
+			await callApi(
+				() =>
+					commands.vocabularyAdd({
+						vaultPath,
+						word,
+						targetLang: resolvedLang,
+						config: {
+							baseUrl: vocabulary.baseUrl,
+							apiKey: vocabulary.apiKey,
+							model: vocabulary.model,
+						},
+					}),
+				{ fallback: t("selection.vocabularyAddFailed") },
+			);
+			setVocabState("added");
+			notifySuccess(t("selection.vocabularyAdded"));
+		} catch (error) {
+			setVocabState("idle");
+			notifyError(errorText(error) || t("selection.vocabularyAddFailed"));
+		}
+	}, [
+		i18n.language,
+		sourceText,
+		t,
+		targetLang,
+		vaultPath,
+		vocabState,
+		vocabulary,
+	]);
 
 	// 根据模式切换标题和 loading 文案
 	const title =
@@ -175,6 +234,7 @@ export function TranslateCard({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: changing modes resets the copy feedback and stream scroll position.
 	useEffect(() => {
 		setCopied(false);
+		setVocabState("idle");
 		stickToBottomRef.current = false;
 		followWriteRef.current = null;
 	}, [mode]);
@@ -284,6 +344,26 @@ export function TranslateCard({
 								onClick: () => void copyResult(),
 								icon: copied ? <Check /> : <Copy />,
 								shortcut: "C",
+							},
+						]
+					: []),
+				...(mode === "dictionary" && showResult && sourceText?.trim()
+					? [
+							{
+								id: "vocabulary",
+								label: t(
+									vocabState === "added"
+										? "selection.vocabularyAdded"
+										: "selection.addToVocabulary",
+								),
+								onClick: () => void addToVocabulary(),
+								icon:
+									vocabState === "added" ? (
+										<Check className="size-3.5" />
+									) : (
+										<BookA className="size-3.5" />
+									),
+								pressed: vocabState === "added",
 							},
 						]
 					: []),

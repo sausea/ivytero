@@ -59,6 +59,7 @@ export type {
 	TranslateProviderConfig,
 	TranslateProviderId,
 	TranslateTargetLang,
+	VocabularySettings,
 } from "@/lib/settings/types";
 export {
 	AUTO_UPDATE_INTERNAL_LINKS,

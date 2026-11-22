@@ -326,6 +326,12 @@ export const commands = {
 	 *  silence, not by a total deadline.
 	 */
 	translateTextStream: (args: TranslateTextArgs, onDelta: Channel<string>) => __TAURI_INVOKE<ApiResult<TranslateTextResult>>("translate_text_stream", { args, onDelta }),
+	/**
+	 *  Look up a selected word through the configured dictionary endpoint and
+	 *  upsert it into the Vault vocabulary notebook (`notes/生词本.md`).
+	 *  Returns the entry Markdown that was written.
+	 */
+	vocabularyAdd: (args: VocabularyAddArgs) => __TAURI_INVOKE<ApiResult<string>>("vocabulary_add", { args }),
 	dictionaryLookup: (text: string, targetLang: string) => __TAURI_INVOKE<ApiResult<DictionaryEntry[]>>("dictionary_lookup", { text, targetLang }),
 	layoutTranslateCacheWrite: (args: LayoutTranslateCacheWriteArgs) => __TAURI_INVOKE<ApiResult<null>>("layout_translate_cache_write", { args }),
 	/**
@@ -1912,6 +1918,8 @@ export type AppSettings_Deserialize = {
 	layout?: LayoutSettings,
 	/**  OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
 	rssAnalysis?: RssAnalysisSettings,
+	/**  OpenAI-compatible endpoint for the vocabulary notebook dictionary lookup. All-empty = disabled. */
+	vocabulary?: VocabularySettings,
 	/**  PostHog product analytics opt-out (applies from the next launch). */
 	telemetryEnabled?: boolean,
 	/**  Plaza discovery sources in the sidebar. Default on. */
@@ -2091,6 +2099,8 @@ export type AppSettings_Serialize = {
 	layout: LayoutSettings,
 	/**  OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
 	rssAnalysis: RssAnalysisSettings,
+	/**  OpenAI-compatible endpoint for the vocabulary notebook dictionary lookup. All-empty = disabled. */
+	vocabulary: VocabularySettings,
 	/**  PostHog product analytics opt-out (applies from the next launch). */
 	telemetryEnabled: boolean,
 	/**  Plaza discovery sources in the sidebar. Default on. */
@@ -6599,6 +6609,27 @@ export type VisualMarksDoctorSection_Serialize = {
 	checkedFiles: number,
 	candidates: VisualMarkCandidate[],
 	issues: DoctorIssue_Serialize[],
+};
+
+export type VocabularyAddArgs = {
+	vaultPath: string,
+	word: string,
+	context?: string | null,
+	targetLang: string,
+	config: VocabularyConfig,
+};
+
+export type VocabularyConfig = {
+	baseUrl: string,
+	apiKey: string,
+	model: string,
+};
+
+/**  Vocabulary notebook dictionary endpoint (BYOK, OpenAI-compatible). All-empty = disabled. */
+export type VocabularySettings = {
+	baseUrl?: string,
+	apiKey?: string,
+	model?: string,
 };
 
 /**  Background ACP warm-up (no user prompt) so Chat can show models/context early. */

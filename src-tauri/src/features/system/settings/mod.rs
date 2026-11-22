@@ -254,6 +254,9 @@ pub struct AppSettings {
     /// OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled.
     #[serde(default)]
     pub rss_analysis: RssAnalysisSettings,
+    /// OpenAI-compatible endpoint for the vocabulary notebook dictionary lookup. All-empty = disabled.
+    #[serde(default)]
+    pub vocabulary: VocabularySettings,
     /// PostHog product analytics opt-out (applies from the next launch).
     #[serde(default = "default_true")]
     pub telemetry_enabled: bool,
@@ -371,6 +374,18 @@ fn default_smart_highlight_timeout_secs() -> u32 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RssAnalysisSettings {
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub model: String,
+}
+
+/// Vocabulary notebook dictionary endpoint (BYOK, OpenAI-compatible). All-empty = disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VocabularySettings {
     #[serde(default)]
     pub base_url: String,
     #[serde(default)]
@@ -647,6 +662,7 @@ impl Default for AppSettings {
             translate: TranslateSettings::default(),
             layout: LayoutSettings::default(),
             rss_analysis: RssAnalysisSettings::default(),
+            vocabulary: VocabularySettings::default(),
             telemetry_enabled: default_true(),
             plaza_enabled: default_true(),
             plaza_hidden_sources: Vec::new(),

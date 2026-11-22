@@ -13,6 +13,7 @@ import {
 	useAgentModelCatalog,
 } from "@/components/settings/agent-model-picker";
 import { RssAnalysisBlock } from "@/components/settings/panes/rss-analysis-block";
+import { VocabularyBlock } from "@/components/settings/panes/vocabulary-block";
 import {
 	PROVIDER_INPUT_CLASS,
 	ProbeDot,
@@ -1162,6 +1163,7 @@ export function TranslatePane({
 				</>
 			)}
 			<RssAnalysisBlock settings={settings} patch={patch} />
+			<VocabularyBlock settings={settings} patch={patch} />
 		</>
 	);
 }

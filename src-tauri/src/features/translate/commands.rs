@@ -175,3 +175,34 @@ pub async fn translate_text(
         }
     }
 }
+
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VocabularyAddArgs {
+    pub vault_path: String,
+    pub word: String,
+    #[serde(default)]
+    pub context: Option<String>,
+    pub target_lang: String,
+    pub config: agentero_core::features::vocabulary::VocabularyConfig,
+}
+
+/// Look up a selected word through the configured dictionary endpoint and
+/// upsert it into the Vault vocabulary notebook (`notes/生词本.md`).
+/// Returns the entry Markdown that was written.
+#[tauri::command]
+#[specta::specta]
+pub async fn vocabulary_add(args: VocabularyAddArgs) -> ApiResult<String> {
+    match agentero_core::features::vocabulary::add_word(
+        &args.vault_path,
+        &args.word,
+        args.context.as_deref(),
+        &args.target_lang,
+        &args.config,
+    )
+    .await
+    {
+        Ok(entry) => ApiResult::ok(entry),
+        Err(e) => map_err(e),
+    }
+}

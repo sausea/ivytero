@@ -17,6 +17,7 @@ pub mod rss_archive;
 pub mod sync;
 pub mod translate;
 pub mod vault;
+pub mod vocabulary;
 pub mod zhihu;
 
 // Stable historical `features::` paths, backed by the semantic module tree.
