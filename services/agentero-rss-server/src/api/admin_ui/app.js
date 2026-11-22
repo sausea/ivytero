@@ -648,7 +648,10 @@
 				const li = el(
 					"li",
 					{ on: { click: () => openArticle(a.id, li) } },
-					el("div", { textContent: a.title }),
+					el("div", { textContent: a.titleTranslated || a.title }),
+					a.titleTranslated
+						? el("div", { class: "meta", textContent: a.title })
+						: null,
 					el("div", {
 						class: "meta",
 						textContent: `${a.feedTitle} · ${when(a.publishedAt || a.firstSeenAt)}`,
@@ -677,7 +680,10 @@
 				);
 			else body.append(el("p", { textContent: a.summaryText }));
 			view.replaceChildren(
-				el("h1", { textContent: a.title }),
+				el("h1", { textContent: a.titleTranslated || a.title }),
+				a.titleTranslated
+					? el("p", { class: "muted", textContent: a.title })
+					: null,
 				el(
 					"p",
 					{ class: "muted" },

@@ -113,6 +113,7 @@ export function bookmarkToFeedItem(bookmark: RssBookmark): FeedItem {
 		subscriptionId: "",
 		subscriptionTitle: bookmark.feedTitle,
 		title: bookmark.title,
+		titleTranslated: null,
 		url: bookmark.url,
 		publishedAt: null,
 		summaryText: "",

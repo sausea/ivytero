@@ -37,6 +37,8 @@ pub struct FeedSub {
     pub id: String,
     pub url: String,
     pub title: String,
+    /// Cloud folder path (`a/b`); empty for local subscriptions.
+    pub folder: String,
     pub added_at: String,
     pub last_fetched_at: Option<String>,
     pub last_error: Option<String>,
@@ -54,6 +56,8 @@ pub struct FeedItem {
     pub subscription_id: String,
     pub subscription_title: String,
     pub title: String,
+    /// zh-CN title supplied by the cloud archive; `None` for local items.
+    pub title_translated: Option<String>,
     pub url: Option<String>,
     pub published_at: Option<String>,
     pub summary_text: String,
@@ -281,6 +285,7 @@ fn map_feed_sub(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedSub> {
         id: row.get(0)?,
         url: row.get(1)?,
         title: row.get(2)?,
+        folder: String::new(),
         added_at: row.get(3)?,
         last_fetched_at: row.get(4)?,
         last_error: row.get(5)?,
@@ -604,6 +609,7 @@ fn map_item_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FeedItem> {
         subscription_id: row.get(1)?,
         subscription_title: row.get(2)?,
         title: row.get(3)?,
+        title_translated: None,
         url: row.get(4)?,
         published_at: row.get(5)?,
         summary_text: row.get::<_, Option<String>>(6)?.unwrap_or_default(),

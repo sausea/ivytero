@@ -17,6 +17,8 @@ pub struct Config {
     pub default_refresh_secs: i64,
     pub concurrency: usize,
     pub fetch: FetchPolicy,
+    /// Translate non-Chinese article titles to zh-CN in the background.
+    pub translate_titles: bool,
 }
 
 fn var(name: &str) -> Option<String> {
@@ -78,6 +80,7 @@ impl Config {
             default_refresh_secs: default_refresh_from_env()?,
             concurrency: parsed("RSS_FETCH_CONCURRENCY", 4usize)?.max(1),
             fetch,
+            translate_titles: parsed("RSS_TRANSLATE_TITLES", false)?,
         })
     }
 }

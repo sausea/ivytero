@@ -1,6 +1,7 @@
 use agentero_rss_server::api::{router, AppState};
 use agentero_rss_server::config::Config;
 use agentero_rss_server::ingest::scheduler::Scheduler;
+use agentero_rss_server::ingest::translator::TitleTranslator;
 use agentero_rss_server::storage::Archive;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,6 +46,15 @@ async fn main() {
         concurrency: config.concurrency,
         tick: Duration::from_secs(15),
     };
+    let translator = config.translate_titles.then(|| {
+        log::info!("title translation: on (zh-CN, free web MT)");
+        tokio::spawn(
+            TitleTranslator {
+                archive: archive.clone(),
+            }
+            .run(stop_rx.clone()),
+        )
+    });
     let scheduler = tokio::spawn(scheduler.run(stop_rx));
 
     let app = router(AppState {
@@ -69,4 +79,7 @@ async fn main() {
     }
     let _ = stop_tx.send(true);
     let _ = scheduler.await;
+    if let Some(translator) = translator {
+        let _ = translator.await;
+    }
 }

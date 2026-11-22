@@ -94,13 +94,32 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
             )));
         }
     }
-    let has_folder: bool = tx.query_row(
-        "SELECT COUNT(*) > 0 FROM pragma_table_info('feeds') WHERE name = 'folder'",
-        [],
-        |r| r.get(0),
-    )?;
-    if !has_folder {
-        tx.execute_batch("ALTER TABLE feeds ADD COLUMN folder TEXT NOT NULL DEFAULT ''")?;
+    for (table, column, ddl) in [
+        (
+            "feeds",
+            "folder",
+            "ALTER TABLE feeds ADD COLUMN folder TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "articles",
+            "title_translated",
+            "ALTER TABLE articles ADD COLUMN title_translated TEXT",
+        ),
+        // The title the translation was made from; differs once the feed edits a title.
+        (
+            "articles",
+            "title_translated_source",
+            "ALTER TABLE articles ADD COLUMN title_translated_source TEXT",
+        ),
+    ] {
+        let present: bool = tx.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info(?1) WHERE name = ?2",
+            params![table, column],
+            |r| r.get(0),
+        )?;
+        if !present {
+            tx.execute_batch(ddl)?;
+        }
     }
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_articles_feed_first_seen ON articles(feed_id, first_seen_at)",
