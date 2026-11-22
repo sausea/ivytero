@@ -222,7 +222,8 @@ pub fn annotate_entry(doc: &str, key: &str, analysis: &str) -> Option<String> {
             .iter()
             .position(|l| l.trim() == "### 正文")
             .unwrap_or(cleaned.len());
-        let mut new_block: Vec<String> = Vec::with_capacity(cleaned.len() + safe.lines().count() + 4);
+        let mut new_block: Vec<String> =
+            Vec::with_capacity(cleaned.len() + safe.lines().count() + 4);
         for (i, line) in cleaned.iter().enumerate() {
             if i == body_at {
                 new_block.push("### AI 分析".to_string());
@@ -369,11 +370,15 @@ mod tests {
         let mut doc = new_document("2026-11-21");
         doc = append_entry(&doc, &entry("s/a1", "T", "body text"));
         doc = append_entry(&doc, &entry("s/a2", "U", "other"));
-        let once = annotate_entry(&doc, "s/a1", "## 小结\n第一段。\n## 要点\n- 甲\n- 乙").expect("annotate");
+        let once = annotate_entry(&doc, "s/a1", "## 小结\n第一段。\n## 要点\n- 甲\n- 乙")
+            .expect("annotate");
         assert!(once.contains("### AI 分析"));
         assert!(once.contains("第一段。"));
         assert!(once.contains("- AI 状态：done"));
-        assert!(!once.contains("\n## 小结"), "analysis headings must be shifted: {once}");
+        assert!(
+            !once.contains("\n## 小结"),
+            "analysis headings must be shifted: {once}"
+        );
         assert!(once.contains("##### 小结"));
         assert!(once.contains("##### 要点"));
         assert_eq!(find_entries(&once).len(), 2, "{once}");
