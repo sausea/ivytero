@@ -21,8 +21,24 @@ pub fn html_to_markdown(html: &str) -> String {
 /// Block-level break hints that become paragraph breaks when a feed body has
 /// no `<p>` markup and htmd collapses it into one long line.
 const PARAGRAPH_BREAKS: &[&str] = &[
-    "<br", "</p", "</div", "</li", "</ul", "</ol", "</h1", "</h2", "</h3", "</h4", "</h5",
-    "</h6", "</blockquote", "</pre", "</tr", "</section", "</article", "\n\n",
+    "<br",
+    "</p",
+    "</div",
+    "</li",
+    "</ul",
+    "</ol",
+    "</h1",
+    "</h2",
+    "</h3",
+    "</h4",
+    "</h5",
+    "</h6",
+    "</blockquote",
+    "</pre",
+    "</tr",
+    "</section",
+    "</article",
+    "\n\n",
 ];
 
 /// Feeds without `<p>` markup (br/div separated, or plain text with blank
