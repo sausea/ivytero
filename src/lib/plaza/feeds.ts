@@ -277,10 +277,28 @@ export function feedDetailMarkdown(item: FeedItem): string {
 	const first = body.split("\n")[0]?.trim() ?? "";
 	const firstText = first.replace(/^#+\s*/, "").trim();
 	const rest = body.split("\n").slice(1).join("\n").trim();
-	if (firstText.toLowerCase() === title.toLowerCase()) {
-		return rest ? `# ${title}\n\n${rest}` : `# ${title}`;
+	const content = firstText.toLowerCase() === title.toLowerCase() ? rest : body;
+	const translated = item.titleTranslated?.trim();
+	const heading = translated ? `# ${translated}\n\n${title}` : `# ${title}`;
+	return content ? `${heading}\n\n${content}` : heading;
+}
+
+export interface FeedSubGroup {
+	folder: string;
+	subs: FeedSub[];
+}
+
+/** Subscriptions grouped by cloud folder; top-level ("") last. */
+export function groupFeedSubs(subs: FeedSub[]): FeedSubGroup[] {
+	const groups = new Map<string, FeedSub[]>();
+	for (const sub of subs) {
+		const list = groups.get(sub.folder) ?? [];
+		list.push(sub);
+		groups.set(sub.folder, list);
 	}
-	return body ? `# ${title}\n\n${body}` : `# ${title}`;
+	return [...groups]
+		.sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
+		.map(([folder, list]) => ({ folder, subs: list }));
 }
 
 const SETTLE_TIMEOUT_MS = 120_000;

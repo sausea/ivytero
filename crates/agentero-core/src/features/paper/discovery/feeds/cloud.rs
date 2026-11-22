@@ -75,6 +75,8 @@ struct WireFeed {
     id: String,
     url: String,
     title: String,
+    #[serde(default)]
+    folder: String,
     added_at: String,
     last_success_at: Option<String>,
     last_error: Option<String>,
@@ -98,6 +100,8 @@ struct WireArticle {
     #[serde(default)]
     feed_title: String,
     title: String,
+    #[serde(default)]
+    title_translated: Option<String>,
     url: Option<String>,
     published_at: Option<String>,
     first_seen_at: String,
@@ -305,6 +309,7 @@ fn to_sub(feed: WireFeed, unread_count: Option<i64>) -> FeedSub {
         id: feed.id,
         url: feed.url,
         title: feed.title,
+        folder: feed.folder,
         added_at: feed.added_at,
         last_fetched_at: feed.last_success_at,
         last_error: feed.last_error,
@@ -330,6 +335,7 @@ fn to_item(article: WireArticle, with_body: bool) -> FeedItem {
         subscription_id: article.feed_id,
         subscription_title: article.feed_title,
         title: article.title,
+        title_translated: article.title_translated,
         url: article.url,
         published_at: article.published_at.or(Some(article.first_seen_at)),
         summary_text: article.summary_text,

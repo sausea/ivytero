@@ -43,6 +43,16 @@ import {
 	formatFeedWhen,
 } from "@/lib/plaza/feeds";
 
+/** Original title under a cloud-translated one. */
+function FeedOriginalTitle({ item }: { item: FeedItem }) {
+	if (!item.titleTranslated) return null;
+	return (
+		<div className="truncate text-muted-foreground text-xs" lang="und">
+			{item.title}
+		</div>
+	);
+}
+
 export function PlazaFeedItemRow({
 	item,
 	hideSource,
@@ -95,21 +105,24 @@ export function PlazaFeedItemRow({
 							{t(item.readAt ? "plaza.feeds.read" : "plaza.feeds.unread")}
 						</span>
 						{hideSource ? (
-							<div className="flex items-baseline gap-2">
-								<span
-									className={cn(
-										"min-w-0 truncate text-sm",
-										!item.readAt && "font-medium",
-									)}
-								>
-									{item.title}
-								</span>
-								{when ? (
-									<span className="shrink-0 text-muted-foreground text-xs">
-										{when}
+							<>
+								<div className="flex items-baseline gap-2">
+									<span
+										className={cn(
+											"min-w-0 truncate text-sm",
+											!item.readAt && "font-medium",
+										)}
+									>
+										{item.titleTranslated || item.title}
 									</span>
-								) : null}
-							</div>
+									{when ? (
+										<span className="shrink-0 text-muted-foreground text-xs">
+											{when}
+										</span>
+									) : null}
+								</div>
+								<FeedOriginalTitle item={item} />
+							</>
 						) : (
 							<>
 								<div
@@ -118,8 +131,9 @@ export function PlazaFeedItemRow({
 										!item.readAt && "font-medium",
 									)}
 								>
-									{item.title}
+									{item.titleTranslated || item.title}
 								</div>
+								<FeedOriginalTitle item={item} />
 								<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
 									<span className="truncate">{item.subscriptionTitle}</span>
 									{when ? (

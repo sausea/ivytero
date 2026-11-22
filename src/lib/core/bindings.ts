@@ -3359,6 +3359,8 @@ export type FeedItem = {
 	subscriptionId: string,
 	subscriptionTitle: string,
 	title: string,
+	/**  zh-CN title supplied by the cloud archive; `None` for local items. */
+	titleTranslated: string | null,
 	url: string | null,
 	publishedAt: string | null,
 	summaryText: string,
@@ -3389,6 +3391,8 @@ export type FeedSub = {
 	id: string,
 	url: string,
 	title: string,
+	/**  Cloud folder path (`a/b`); empty for local subscriptions. */
+	folder: string,
 	addedAt: string,
 	lastFetchedAt: string | null,
 	lastError: string | null,

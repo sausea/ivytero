@@ -307,6 +307,7 @@ mod tests {
             subscription_id: "s".into(),
             subscription_title: "S".into(),
             title: "T".into(),
+            title_translated: None,
             url: Some("https://example.com/a".into()),
             published_at: None,
             summary_text: "sum".into(),

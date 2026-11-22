@@ -362,6 +362,7 @@
 			"markRead": "标记为已读",
 			"markUnread": "标记为未读",
 			"markAllRead": "全部标为已读",
+			"noFolder": "未分组",
 			"source": "订阅来源",
 			"sourceLocal": "本地",
 			"sourceCloud": "云端",

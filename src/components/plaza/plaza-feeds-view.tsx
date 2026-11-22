@@ -6,6 +6,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TFunction } from "i18next";
 import {
 	CheckCheck,
+	ChevronRight,
 	Cloud,
 	EllipsisVertical,
 	EyeOff,
@@ -16,7 +17,14 @@ import {
 	Rss,
 	Star,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Fragment,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { PlazaFeedBookmarkDialog } from "@/components/plaza/plaza-feeds-bookmark-dialog";
 import {
@@ -73,6 +81,7 @@ import {
 	feedsResolveBody,
 	feedsSetPinned,
 	feedsSetRead,
+	groupFeedSubs,
 	hostErrorKey,
 	importFeedItem,
 } from "@/lib/plaza/feeds";
@@ -117,6 +126,25 @@ function openFeedSubMenu(
 	event.preventDefault();
 	event.stopPropagation();
 	setMenu({ sub, x: event.clientX, y: event.clientY });
+}
+
+const HIDE_READ_KEY = "agentero-plaza-feeds-hide-read";
+
+/** "Hide read" defaults on; the last choice is kept across restarts. */
+function readHideReadPreference(): boolean {
+	try {
+		return window.localStorage.getItem(HIDE_READ_KEY) !== "0";
+	} catch {
+		return true;
+	}
+}
+
+function writeHideReadPreference(hide: boolean): void {
+	try {
+		window.localStorage.setItem(HIDE_READ_KEY, hide ? "1" : "0");
+	} catch {
+		/* preference is best-effort */
+	}
 }
 
 function UnreadCount({ value }: { value: number | null }) {
@@ -431,7 +459,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [subs, setSubs] = useState<FeedSub[]>([]);
 	const subsRef = useRef(subs);
 	subsRef.current = subs;
-	const [hideRead, setHideRead] = useState(false);
+	const [hideRead, setHideRead] = useState(readHideReadPreference);
 	const hideReadRef = useRef(hideRead);
 	hideReadRef.current = hideRead;
 	const itemsRequest = useRef(0);
@@ -448,6 +476,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [busy, setBusy] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 	const [markingAll, setMarkingAll] = useState(false);
+	const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [renameTarget, setRenameTarget] = useState<FeedSub | null>(null);
 	const [renameTitle, setRenameTitle] = useState("");
 	const [openItem, setOpenItem] = useState<FeedItem | null>(null);
@@ -987,6 +1018,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		? (subs.find((row) => row.id === selectedId) ?? null)
 		: null;
 	const emptyItems = !loading && visibleItems.length === 0;
+	const subGroups = useMemo(() => groupFeedSubs(subs), [subs]);
+	const showFolders = subGroups.some((group) => group.folder !== "");
 	const totalUnread = subs.some((row) => row.unreadCount !== null)
 		? subs.reduce((n, row) => n + (row.unreadCount ?? 0), 0)
 		: null;
@@ -1073,6 +1106,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								onClick={() => {
 									hideReadRef.current = !hideRead;
 									setHideRead(!hideRead);
+									writeHideReadPreference(!hideRead);
 									void loadItems(selectedId, false);
 								}}
 							>
@@ -1147,67 +1181,112 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								</span>
 								<UnreadCount value={totalUnread} />
 							</button>
-							{subs.map((sub) => (
-								<div key={sub.id} className="group/feed relative">
-									<button
-										type="button"
-										onClick={() => {
-											setSelectedId(sub.id);
-											void loadItems(sub.id);
-										}}
-										onContextMenu={(event) => {
-											if (cloud) return;
-											openFeedSubMenu(sub, event, setSubMenu);
-										}}
-										className={cn(
-											"flex w-full flex-col rounded-lg py-1.5 pr-7 pl-2.5 text-left",
-											"transition-colors duration-150 ease-out",
-											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-											selectedId === sub.id
-												? "bg-foreground/10 text-foreground"
-												: "hover:bg-foreground/5",
-										)}
-									>
-										<span className="flex min-w-0 items-center gap-1">
-											{sub.pinned ? (
-												<Pin
-													className="size-3 shrink-0 text-muted-foreground"
-													aria-hidden
-												/>
-											) : null}
-											<span className="min-w-0 flex-1 truncate text-sm">
-												{sub.title}
-											</span>
-											<UnreadCount value={sub.unreadCount} />
-										</span>
-										{sub.lastError ? (
-											<span className="truncate text-destructive text-xs">
-												{formatHostError(sub.lastError, t)}
-											</span>
-										) : null}
-									</button>
-									{cloud ? null : (
-										<Button
+							{subGroups.map((group) => (
+								<Fragment key={`folder:${group.folder}`}>
+									{showFolders ? (
+										<button
 											type="button"
-											variant="ghost"
-											size="icon-sm"
-											className="absolute top-0 right-0.5 bottom-0 my-auto size-6 opacity-0 transition-opacity duration-150 group-hover/feed:opacity-100 focus-visible:opacity-100"
-											aria-label={t("plaza.feeds.more")}
-											onClick={(event) => {
-												event.stopPropagation();
-												const rect =
-													event.currentTarget.getBoundingClientRect();
-												setSubMenu({
-													sub,
-													x: rect.right,
-													y: rect.bottom,
-												});
-											}}
+											aria-expanded={!collapsedFolders.has(group.folder)}
+											onClick={() =>
+												setCollapsedFolders((prev) => {
+													const next = new Set(prev);
+													if (!next.delete(group.folder))
+														next.add(group.folder);
+													return next;
+												})
+											}
+											className="flex w-full items-center gap-1 rounded-lg px-1.5 pt-2 pb-0.5 text-left text-muted-foreground text-xs hover:text-foreground"
 										>
-											<EllipsisVertical className="size-3.5" aria-hidden />
-										</Button>
-									)}
-								</div>
+											<ChevronRight
+												className={cn(
+													"size-3 shrink-0 transition-transform duration-150",
+													!collapsedFolders.has(group.folder) && "rotate-90",
+												)}
+												aria-hidden
+											/>
+											<span className="min-w-0 flex-1 truncate">
+												{group.folder || t("plaza.feeds.noFolder")}
+											</span>
+											<UnreadCount
+												value={
+													group.subs.some((row) => row.unreadCount !== null)
+														? group.subs.reduce(
+																(n, row) => n + (row.unreadCount ?? 0),
+																0,
+															)
+														: null
+												}
+											/>
+										</button>
+									) : null}
+									{showFolders && collapsedFolders.has(group.folder)
+										? null
+										: group.subs.map((sub) => (
+												<div key={sub.id} className="group/feed relative">
+													<button
+														type="button"
+														onClick={() => {
+															setSelectedId(sub.id);
+															void loadItems(sub.id);
+														}}
+														onContextMenu={(event) => {
+															if (cloud) return;
+															openFeedSubMenu(sub, event, setSubMenu);
+														}}
+														className={cn(
+															"flex w-full flex-col rounded-lg py-1.5 pr-7 pl-2.5 text-left",
+															"transition-colors duration-150 ease-out",
+															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+															selectedId === sub.id
+																? "bg-foreground/10 text-foreground"
+																: "hover:bg-foreground/5",
+														)}
+													>
+														<span className="flex min-w-0 items-center gap-1">
+															{sub.pinned ? (
+																<Pin
+																	className="size-3 shrink-0 text-muted-foreground"
+																	aria-hidden
+																/>
+															) : null}
+															<span className="min-w-0 flex-1 truncate text-sm">
+																{sub.title}
+															</span>
+															<UnreadCount value={sub.unreadCount} />
+														</span>
+														{sub.lastError ? (
+															<span className="truncate text-destructive text-xs">
+																{formatHostError(sub.lastError, t)}
+															</span>
+														) : null}
+													</button>
+													{cloud ? null : (
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-sm"
+															className="absolute top-0 right-0.5 bottom-0 my-auto size-6 opacity-0 transition-opacity duration-150 group-hover/feed:opacity-100 focus-visible:opacity-100"
+															aria-label={t("plaza.feeds.more")}
+															onClick={(event) => {
+																event.stopPropagation();
+																const rect =
+																	event.currentTarget.getBoundingClientRect();
+																setSubMenu({
+																	sub,
+																	x: rect.right,
+																	y: rect.bottom,
+																});
+															}}
+														>
+															<EllipsisVertical
+																className="size-3.5"
+																aria-hidden
+															/>
+														</Button>
+													)}
+												</div>
+											))}
+								</Fragment>
 							))}
 						</div>
 					</nav>
