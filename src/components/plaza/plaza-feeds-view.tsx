@@ -101,6 +101,9 @@ import { openVaultRel } from "@/lib/workspace/viewer-actions";
 
 const STALE_REFRESH_MS = 15 * 60 * 1000;
 
+/** Below this width the reading pane replaces the list instead of sitting beside it. */
+const READING_PANE_MIN_WIDTH = 1000;
+
 function toastHostError(message: string, t: TFunction<"sidebar">): void {
 	const key = hostErrorKey(message);
 	notifyError(key ? t(key) : message);
@@ -506,6 +509,18 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		() => new Map(),
 	);
 	const [bookmarkTarget, setBookmarkTarget] = useState<FeedItem | null>(null);
+	const [panesEl, setPanesEl] = useState<HTMLDivElement | null>(null);
+	const [widePanes, setWidePanes] = useState(false);
+
+	useEffect(() => {
+		if (!panesEl) return;
+		const update = () =>
+			setWidePanes(panesEl.clientWidth >= READING_PANE_MIN_WIDTH);
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(panesEl);
+		return () => observer.disconnect();
+	}, [panesEl]);
 
 	useEffect(() => {
 		void feedsCloudSettingsGet()
@@ -973,9 +988,13 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		[source, t],
 	);
 
+	const openItemId = openItem?.id ?? null;
 	const visibleItems = useMemo(
-		() => (hideRead ? items.filter((item) => !item.readAt) : items),
-		[hideRead, items],
+		() =>
+			hideRead
+				? items.filter((item) => !item.readAt || item.id === openItemId)
+				: items,
+		[hideRead, items, openItemId],
 	);
 	const virtualizer = useVirtualizer({
 		count: visibleItems.length,
@@ -1028,6 +1047,24 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		items.some((row) => !row.readAt);
 	const hasSubs = subs.length > 0;
 
+	const detailPane = openItem ? (
+		<PlazaFeedItemDetail
+			item={openItem}
+			hideSource={selectedId !== null}
+			onBack={() => {
+				setOpenItem(null);
+				if (hideRead) void loadItems(selectedId);
+			}}
+			onToggleRead={() => void setRead(openItem, !openItem.readAt)}
+			onImport={(item) => void importItem(item)}
+			importing={importingIds.has(openItem.id)}
+			onResolved={applyItem}
+			resolveBody={cloud ? feedsCloudItem : undefined}
+			starred={bookmarks.has(openItem.id)}
+			onStar={() => onStar(openItem)}
+		/>
+	) : null;
+
 	return (
 		<div className={cn("flex h-full min-h-0 flex-col", className)}>
 			{!hasSubs && (loading || source === null) ? (
@@ -1064,7 +1101,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					</div>
 				</div>
 			) : (
-				<div className="flex min-h-0 min-w-0 flex-1">
+				<div ref={setPanesEl} className="flex min-h-0 min-w-0 flex-1">
 					<nav className="flex w-52 shrink-0 select-none flex-col gap-2 bg-muted/50 p-2">
 						{cloud ? null : (
 							<AddForm
@@ -1290,81 +1327,83 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 							))}
 						</div>
 					</nav>
-					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-						{openItem ? (
-							<PlazaFeedItemDetail
-								item={openItem}
-								hideSource={selectedId !== null}
-								onBack={() => {
-									setOpenItem(null);
-									if (hideRead) void loadItems(selectedId);
-								}}
-								onToggleRead={() => void setRead(openItem, !openItem.readAt)}
-								onImport={(item) => void importItem(item)}
-								importing={importingIds.has(openItem.id)}
-								onResolved={applyItem}
-								resolveBody={cloud ? feedsCloudItem : undefined}
-								starred={bookmarks.has(openItem.id)}
-								onStar={() => onStar(openItem)}
-							/>
-						) : emptyItems ? (
-							<div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-								<Inbox
-									className="size-5 text-muted-foreground/60"
-									aria-hidden
-								/>
-								<p className="text-muted-foreground text-sm">
-									{selected?.lastError
-										? formatHostError(selected.lastError, t)
-										: t(
-												starredOnly
-													? "plaza.feeds.emptyStarred"
-													: hideRead
-														? "plaza.feeds.emptyUnread"
-														: "plaza.feeds.emptyItems",
-											)}
-								</p>
-							</div>
-						) : (
+					{openItem && !widePanes ? (
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{detailPane}
+						</div>
+					) : (
+						<>
 							<div
-								ref={listRef}
-								className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-3"
+								className={cn(
+									"flex min-h-0 min-w-0 flex-col",
+									openItem ? "w-[22rem] shrink-0 border-r" : "flex-1",
+								)}
 							>
-								<div
-									className="relative w-full"
-									style={{ height: virtualizer.getTotalSize() }}
-								>
-									{virtualRows.map((virtualRow) => {
-										const item = visibleItems[virtualRow.index];
-										return (
-											<div
-												key={item.id}
-												className="absolute top-0 left-0 w-full pb-2"
-												style={{
-													transform: `translateY(${virtualRow.start}px)`,
-												}}
-												ref={virtualizer.measureElement}
-												data-index={virtualRow.index}
-											>
-												<PlazaFeedItemRow
-													item={item}
-													starred={bookmarks.has(item.id)}
-													onStar={onStar}
-													hideSource={selectedId !== null}
-													onOpen={openFeedItem}
-													onImport={(item) => void importItem(item)}
-													importing={importingIds.has(item.id)}
-													onToggleRead={(item) =>
-														void setRead(item, !item.readAt)
-													}
-												/>
-											</div>
-										);
-									})}
-								</div>
+								{emptyItems ? (
+									<div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+										<Inbox
+											className="size-5 text-muted-foreground/60"
+											aria-hidden
+										/>
+										<p className="text-muted-foreground text-sm">
+											{selected?.lastError
+												? formatHostError(selected.lastError, t)
+												: t(
+														starredOnly
+															? "plaza.feeds.emptyStarred"
+															: hideRead
+																? "plaza.feeds.emptyUnread"
+																: "plaza.feeds.emptyItems",
+													)}
+										</p>
+									</div>
+								) : (
+									<div
+										ref={listRef}
+										className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-3"
+									>
+										<div
+											className="relative w-full"
+											style={{ height: virtualizer.getTotalSize() }}
+										>
+											{virtualRows.map((virtualRow) => {
+												const item = visibleItems[virtualRow.index];
+												return (
+													<div
+														key={item.id}
+														className="absolute top-0 left-0 w-full pb-2"
+														style={{
+															transform: `translateY(${virtualRow.start}px)`,
+														}}
+														ref={virtualizer.measureElement}
+														data-index={virtualRow.index}
+													>
+														<PlazaFeedItemRow
+															item={item}
+															starred={bookmarks.has(item.id)}
+															onStar={onStar}
+															hideSource={selectedId !== null}
+															onOpen={openFeedItem}
+															onImport={(item) => void importItem(item)}
+															importing={importingIds.has(item.id)}
+															onToggleRead={(item) =>
+																void setRead(item, !item.readAt)
+															}
+														/>
+													</div>
+												);
+											})}
+										</div>
+									</div>
+								)}
 							</div>
-						)}
-					</div>
+							{openItem ? (
+								<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+									{detailPane}
+								</div>
+							) : null}
+						</>
+					)}
 				</div>
 			)}
 
