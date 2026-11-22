@@ -55,6 +55,7 @@
 				statDisabled: "已停用",
 				statFailing: "抓取失败",
 				statArticles: "文章总数",
+				new24h: "24 小时新增",
 				groupMeta: "{feeds} 个订阅 · {articles} 篇",
 				queuedN: "已将 {n} 个订阅加入抓取队列",
 				updatedN: "已更新 {n} 个订阅",
@@ -114,6 +115,7 @@
 				statDisabled: "Disabled",
 				statFailing: "Failing",
 				statArticles: "Articles",
+				new24h: "New in 24h",
 				groupMeta: "{feeds} feeds · {articles} articles",
 				queuedN: "Queued {n} feeds for fetching",
 				updatedN: "Updated {n} feeds",
@@ -231,6 +233,7 @@
 			["statDisabled", count((f) => !f.enabled)],
 			["statFailing", count((f) => f.enabled && f.failureCount > 0)],
 			["statArticles", feeds.reduce((n, f) => n + f.articleCount, 0)],
+			["new24h", feeds.reduce((n, f) => n + (f.newCount ?? 0), 0)],
 		];
 		$("stats").replaceChildren(
 			...stats.map(([label, n]) =>
@@ -304,6 +307,7 @@
 			),
 			el("td", {}, status),
 			el("td", { textContent: String(f.articleCount) }),
+			el("td", { textContent: f.newCount ? `+${f.newCount}` : "0" }),
 			el("td", { textContent: human(f.refreshIntervalSecs) }),
 			el("td", { textContent: when(f.lastSuccessAt) }),
 			el(
@@ -372,7 +376,7 @@
 			el("td", { class: "check" }, box),
 			el(
 				"td",
-				{ colSpan: 6 },
+				{ colSpan: 7 },
 				toggle,
 				el("span", {
 					class: "muted",
@@ -428,7 +432,8 @@
 
 	async function loadFeeds() {
 		try {
-			feeds = (await api("/feeds")).items;
+			const since = new Date(Date.now() - 86_400_000).toISOString();
+			feeds = (await api(`/feeds?newSince=${encodeURIComponent(since)}`)).items;
 		} catch (e) {
 			return fail(e);
 		}
