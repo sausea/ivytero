@@ -1,10 +1,10 @@
-//! Schema V1. Article ids are minted once and never regenerated; see the
+//! Schema V2 (V1 plus `feeds.folder`). Article ids are minted once and never regenerated; see the
 //! design doc §3 before changing anything here.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
-pub const SCHEMA_VERSION: &str = "1";
+pub const SCHEMA_VERSION: &str = "2";
 
 const SCHEMA_V1: &str = "
 CREATE TABLE IF NOT EXISTS meta (
@@ -81,6 +81,12 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
                 [SCHEMA_VERSION],
             )?;
         }
+        Some("1") => {
+            tx.execute(
+                "UPDATE meta SET value = ?1 WHERE key = 'schema_version'",
+                [SCHEMA_VERSION],
+            )?;
+        }
         Some(SCHEMA_VERSION) => {}
         Some(other) => {
             return Err(rusqlite::Error::InvalidParameterName(format!(
@@ -88,9 +94,48 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
             )));
         }
     }
+    let has_folder: bool = tx.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('feeds') WHERE name = 'folder'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_folder {
+        tx.execute_batch("ALTER TABLE feeds ADD COLUMN folder TEXT NOT NULL DEFAULT ''")?;
+    }
     tx.execute(
         "INSERT OR IGNORE INTO meta (key, value) VALUES ('server_id', ?1)",
         params![Uuid::new_v4().to_string()],
     )?;
     tx.commit()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upgrades_v1_archives_in_place() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA_V1).unwrap();
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('schema_version', '1')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO feeds (id, url, title, added_at) VALUES ('f', 'https://a.example/', 'A', 'now')",
+            [],
+        )
+        .unwrap();
+        migrate(&mut conn).unwrap();
+        migrate(&mut conn).unwrap();
+        let (version, folder): (String, String) = conn
+            .query_row(
+                "SELECT (SELECT value FROM meta WHERE key = 'schema_version'), folder FROM feeds",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((version.as_str(), folder.as_str()), (SCHEMA_VERSION, ""));
+    }
 }

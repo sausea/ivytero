@@ -30,7 +30,6 @@
 				editInterval: "改间隔",
 				rename: "重命名",
 				never: "从未",
-				summary: "{feeds} 个订阅 · {articles} 篇文章",
 				allFeeds: "全部订阅",
 				loadMore: "加载更多",
 				noArticles: "没有文章。",
@@ -45,6 +44,21 @@
 				unauthorized: "Token 无效。",
 				failed: "操作失败：",
 				disableConfirm: "停用后不再抓取，历史文章保留。继续？",
+				moveFolder: "移动到文件夹",
+				folderPrompt: "文件夹（用 / 分隔多级，留空表示不分组）",
+				noFolder: "未分组",
+				selectAll: "全选",
+				selected: "已选 {n} 个",
+				clearSelection: "取消选择",
+				statFeeds: "订阅总数",
+				statEnabled: "启用",
+				statDisabled: "已停用",
+				statFailing: "抓取失败",
+				statArticles: "文章总数",
+				groupMeta: "{feeds} 个订阅 · {articles} 篇",
+				queuedN: "已将 {n} 个订阅加入抓取队列",
+				updatedN: "已更新 {n} 个订阅",
+				disableManyConfirm: "停用所选 {n} 个订阅？历史文章保留。",
 			}
 		: {
 				title: "Agentero Cloud RSS",
@@ -75,7 +89,6 @@
 				editInterval: "Interval",
 				rename: "Rename",
 				never: "never",
-				summary: "{feeds} feeds · {articles} articles",
 				allFeeds: "All feeds",
 				loadMore: "Load more",
 				noArticles: "No articles.",
@@ -90,6 +103,22 @@
 				unauthorized: "Invalid token.",
 				failed: "Failed: ",
 				disableConfirm: "Stop polling this feed? Its history is kept.",
+				moveFolder: "Move to folder",
+				folderPrompt: "Folder (use / for subfolders, empty for none)",
+				noFolder: "No folder",
+				selectAll: "Select all",
+				selected: "{n} selected",
+				clearSelection: "Clear",
+				statFeeds: "Feeds",
+				statEnabled: "Enabled",
+				statDisabled: "Disabled",
+				statFailing: "Failing",
+				statArticles: "Articles",
+				groupMeta: "{feeds} feeds · {articles} articles",
+				queuedN: "Queued {n} feeds for fetching",
+				updatedN: "Updated {n} feeds",
+				disableManyConfirm:
+					"Disable the {n} selected feeds? Their history is kept.",
 			};
 	const t = (k, vars = {}) =>
 		(T[k] || k).replace(/\{(\w+)\}/g, (_, v) => String(vars[v] ?? ""));
@@ -110,6 +139,8 @@
 		n.textContent = t(n.dataset.i18n);
 	for (const n of document.querySelectorAll("[data-i18n-placeholder]"))
 		n.placeholder = t(n.dataset.i18nPlaceholder);
+	for (const n of document.querySelectorAll("[data-i18n-aria]"))
+		n.setAttribute("aria-label", t(n.dataset.i18nAria));
 	document.title = t("title");
 
 	let token = sessionStorage.getItem("rssAdminToken") || "";
@@ -189,84 +220,241 @@
 	const human = (s) =>
 		s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`;
 
+	const selected = new Set();
+	const collapsed = new Set();
+
+	function renderStats() {
+		const count = (pred) => feeds.filter(pred).length;
+		const stats = [
+			["statFeeds", feeds.length],
+			["statEnabled", count((f) => f.enabled)],
+			["statDisabled", count((f) => !f.enabled)],
+			["statFailing", count((f) => f.enabled && f.failureCount > 0)],
+			["statArticles", feeds.reduce((n, f) => n + f.articleCount, 0)],
+		];
+		$("stats").replaceChildren(
+			...stats.map(([label, n]) =>
+				el(
+					"div",
+					{ class: `stat${label === "statFailing" && n > 0 ? " bad" : ""}` },
+					el("strong", { textContent: n.toLocaleString() }),
+					el("span", { textContent: t(label) }),
+				),
+			),
+		);
+	}
+
+	function syncSelection() {
+		for (const id of [...selected])
+			if (!feeds.some((f) => f.id === id)) selected.delete(id);
+		$("bulkBar").hidden = selected.size === 0;
+		$("selCount").textContent = t("selected", { n: selected.size });
+		const all = $("selectAll");
+		all.checked = feeds.length > 0 && selected.size === feeds.length;
+		all.indeterminate = selected.size > 0 && selected.size < feeds.length;
+		for (const box of document.querySelectorAll("#feedRows input[data-feed]"))
+			box.checked = selected.has(box.dataset.feed);
+		for (const box of document.querySelectorAll(
+			"#feedRows input[data-group]",
+		)) {
+			const ids = groupIds(box.dataset.group);
+			const n = ids.filter((id) => selected.has(id)).length;
+			box.checked = n > 0 && n === ids.length;
+			box.indeterminate = n > 0 && n < ids.length;
+		}
+	}
+
+	const groupIds = (folder) =>
+		feeds.filter((f) => f.folder === folder).map((f) => f.id);
+
+	function feedRow(f) {
+		const status = !f.enabled
+			? el("span", { class: "pill off", textContent: t("disabled") })
+			: f.failureCount > 0
+				? el("span", {
+						class: "pill bad",
+						textContent: t("failing", { n: f.failureCount }),
+					})
+				: el("span", { class: "pill on", textContent: t("enabled") });
+		const act = (label, fn) =>
+			el("button", {
+				type: "button",
+				textContent: t(label),
+				on: { click: () => fn().catch(fail) },
+			});
+		const box = el("input", { type: "checkbox", ariaLabel: f.title });
+		box.dataset.feed = f.id;
+		box.addEventListener("change", () => {
+			if (box.checked) selected.add(f.id);
+			else selected.delete(f.id);
+			syncSelection();
+		});
+		return el(
+			"tr",
+			{},
+			el("td", { class: "check" }, box),
+			el(
+				"td",
+				{},
+				el("strong", { textContent: f.title }),
+				el("span", { class: "url", textContent: f.url }),
+				f.lastError
+					? el("span", { class: "err", textContent: f.lastError })
+					: null,
+			),
+			el("td", {}, status),
+			el("td", { textContent: String(f.articleCount) }),
+			el("td", { textContent: human(f.refreshIntervalSecs) }),
+			el("td", { textContent: when(f.lastSuccessAt) }),
+			el(
+				"td",
+				{ class: "actions" },
+				act("refresh", async () => {
+					await api(`/feeds/${f.id}/refresh`, { method: "POST" });
+					toast(t("queued"));
+				}),
+				act("rename", async () => {
+					const title = prompt(t("titlePrompt"), f.title);
+					if (title?.trim()) await patch(f.id, { title });
+				}),
+				act("moveFolder", async () => {
+					const folder = prompt(t("folderPrompt"), f.folder);
+					if (folder !== null) await patch(f.id, { folder });
+				}),
+				act("editInterval", async () => {
+					const raw = prompt(
+						t("intervalPrompt"),
+						String(f.refreshIntervalSecs),
+					);
+					if (raw?.trim()) await patch(f.id, { intervalSecs: Number(raw) });
+				}),
+				act(f.enabled ? "disable" : "enable", async () => {
+					if (f.enabled && !confirm(t("disableConfirm"))) return;
+					await patch(f.id, { enabled: !f.enabled });
+				}),
+			),
+		);
+	}
+
+	function groupRow(folder, items) {
+		const box = el("input", {
+			type: "checkbox",
+			ariaLabel: folder || t("noFolder"),
+		});
+		box.dataset.group = folder;
+		box.addEventListener("change", () => {
+			for (const f of items) {
+				if (box.checked) selected.add(f.id);
+				else selected.delete(f.id);
+			}
+			syncSelection();
+		});
+		const open = !collapsed.has(folder);
+		const toggle = el(
+			"button",
+			{
+				type: "button",
+				class: "ghost folder",
+				ariaExpanded: String(open),
+				on: {
+					click: () => {
+						if (open) collapsed.add(folder);
+						else collapsed.delete(folder);
+						renderFeeds();
+					},
+				},
+			},
+			`${open ? "▾" : "▸"} ${folder || t("noFolder")}`,
+		);
+		return el(
+			"tr",
+			{ class: "group" },
+			el("td", { class: "check" }, box),
+			el(
+				"td",
+				{ colSpan: 6 },
+				toggle,
+				el("span", {
+					class: "muted",
+					textContent: t("groupMeta", {
+						feeds: items.length,
+						articles: items.reduce((n, f) => n + f.articleCount, 0),
+					}),
+				}),
+			),
+		);
+	}
+
+	function groupedFeeds() {
+		const groups = new Map();
+		for (const f of feeds) {
+			if (!groups.has(f.folder)) groups.set(f.folder, []);
+			groups.get(f.folder).push(f);
+		}
+		return [...groups].sort(([a], [b]) =>
+			a === "" ? 1 : b === "" ? -1 : a.localeCompare(b),
+		);
+	}
+
+	function renderFeeds() {
+		renderStats();
+		const groups = groupedFeeds();
+		const flat = groups.length === 1 && groups[0][0] === "";
+		const rows = [];
+		for (const [folder, items] of groups) {
+			if (!flat) rows.push(groupRow(folder, items));
+			if (flat || !collapsed.has(folder)) rows.push(...items.map(feedRow));
+		}
+		$("feedRows").replaceChildren(...rows);
+		syncSelection();
+		const sel = $("articleFeed");
+		const current = sel.value;
+		const options = (items) =>
+			items.map((f) => el("option", { value: f.id, textContent: f.title }));
+		sel.replaceChildren(
+			el("option", { value: "", textContent: t("allFeeds") }),
+			...(flat
+				? options(feeds)
+				: groups.map(([folder, items]) =>
+						el(
+							"optgroup",
+							{ label: folder || t("noFolder") },
+							...options(items),
+						),
+					)),
+		);
+		sel.value = feeds.some((f) => f.id === current) ? current : "";
+	}
+
 	async function loadFeeds() {
 		try {
 			feeds = (await api("/feeds")).items;
 		} catch (e) {
 			return fail(e);
 		}
-		const total = feeds.reduce((n, f) => n + f.articleCount, 0);
-		$("feedSummary").textContent = t("summary", {
-			feeds: feeds.length,
-			articles: total,
-		});
-		const rows = $("feedRows");
-		rows.replaceChildren(
-			...feeds.map((f) => {
-				const status = !f.enabled
-					? el("span", { class: "pill off", textContent: t("disabled") })
-					: f.failureCount > 0
-						? el("span", {
-								class: "pill bad",
-								textContent: t("failing", { n: f.failureCount }),
-							})
-						: el("span", { class: "pill on", textContent: t("enabled") });
-				const act = (label, fn) =>
-					el("button", {
-						textContent: t(label),
-						on: { click: () => fn().catch(fail) },
-					});
-				return el(
-					"tr",
-					{},
-					el(
-						"td",
-						{},
-						el("strong", { textContent: f.title }),
-						el("span", { class: "url", textContent: f.url }),
-						f.lastError
-							? el("span", { class: "err", textContent: f.lastError })
-							: null,
-					),
-					el("td", {}, status),
-					el("td", { textContent: String(f.articleCount) }),
-					el("td", { textContent: human(f.refreshIntervalSecs) }),
-					el("td", { textContent: when(f.lastSuccessAt) }),
-					el(
-						"td",
-						{ class: "actions" },
-						act("refresh", async () => {
-							await api(`/feeds/${f.id}/refresh`, { method: "POST" });
-							toast(t("queued"));
-						}),
-						act("rename", async () => {
-							const title = prompt(t("titlePrompt"), f.title);
-							if (title?.trim()) {
-								await patch(f.id, { title });
-							}
-						}),
-						act("editInterval", async () => {
-							const raw = prompt(
-								t("intervalPrompt"),
-								String(f.refreshIntervalSecs),
-							);
-							if (raw?.trim()) await patch(f.id, { intervalSecs: Number(raw) });
-						}),
-						act(f.enabled ? "disable" : "enable", async () => {
-							if (f.enabled && !confirm(t("disableConfirm"))) return;
-							await patch(f.id, { enabled: !f.enabled });
-						}),
-					),
-				);
-			}),
-		);
-		const sel = $("articleFeed");
-		const current = sel.value;
-		sel.replaceChildren(
-			el("option", { value: "", textContent: t("allFeeds") }),
-			...feeds.map((f) => el("option", { value: f.id, textContent: f.title })),
-		);
-		sel.value = feeds.some((f) => f.id === current) ? current : "";
+		renderFeeds();
+	}
+
+	async function bulk(action, extra = {}) {
+		const ids = [...selected];
+		if (!ids.length) return;
+		if (
+			action === "disable" &&
+			!confirm(t("disableManyConfirm", { n: ids.length }))
+		)
+			return;
+		try {
+			const r = await api("/feeds/batch", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ ids, action, ...extra }),
+			});
+			toast(t(action === "refresh" ? "queuedN" : "updatedN", { n: r.updated }));
+			if (action !== "refresh") selected.clear();
+			await loadFeeds();
+		} catch (e) {
+			fail(e);
+		}
 	}
 
 	async function patch(id, body) {
@@ -529,6 +717,24 @@
 	);
 	$("exportBtn").addEventListener("click", exportOpml);
 	$("reloadFeeds").addEventListener("click", loadFeeds);
+	$("selectAll").addEventListener("change", (e) => {
+		for (const f of feeds) {
+			if (e.target.checked) selected.add(f.id);
+			else selected.delete(f.id);
+		}
+		syncSelection();
+	});
+	$("bulkRefresh").addEventListener("click", () => bulk("refresh"));
+	$("bulkEnable").addEventListener("click", () => bulk("enable"));
+	$("bulkDisable").addEventListener("click", () => bulk("disable"));
+	$("bulkMove").addEventListener("click", () => {
+		const folder = prompt(t("folderPrompt"), "");
+		if (folder !== null) bulk("move", { folder });
+	});
+	$("bulkClear").addEventListener("click", () => {
+		selected.clear();
+		syncSelection();
+	});
 	$("articleFeed").addEventListener("change", () => loadArticles(true));
 	$("moreBtn").addEventListener("click", () => loadArticles(false));
 	for (const b of document.querySelectorAll(".tab"))

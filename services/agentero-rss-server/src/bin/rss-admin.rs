@@ -113,6 +113,10 @@ fn run(cli: Cli) -> Result<(), String> {
                 let title = entry.title.unwrap_or_else(|| url.clone());
                 match storage::add_feed(&conn, &url, &title, interval) {
                     Ok(feed) => {
+                        if !entry.folder.is_empty() {
+                            storage::set_folder(&conn, &feed.id, &entry.folder)
+                                .map_err(|e| e.to_string())?;
+                        }
                         println!("{}\t{}", feed.id, feed.url);
                         added += 1;
                     }

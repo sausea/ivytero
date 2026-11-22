@@ -88,7 +88,7 @@ async fn opml_import_export_and_feed_edits() {
     );
 
     let opml = r#"<?xml version="1.0"?><opml version="2.0"><body>
-        <outline text="Folder"><outline text="A &amp; B" xmlUrl="https://a.example/feed"/></outline>
+        <outline text="Folder"><outline text="Sub"><outline text="A &amp; B" xmlUrl="https://a.example/feed"/></outline></outline>
         <outline text="Dup" xmlUrl="https://a.example/feed"/>
         <outline text="Bad" xmlUrl="ftp://x.example/feed"/>
         <outline title="中文" xmlUrl="https://b.example/rss"/></body></opml>"#;
@@ -103,6 +103,41 @@ async fn opml_import_export_and_feed_edits() {
         .map(|s| s["reason"].as_str().unwrap())
         .collect();
     assert_eq!(reasons, ["duplicate", "invalid_url"]);
+    let folders: Vec<_> = report["added"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["folder"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(folders, ["Folder/Sub", ""]);
+    let ids: Vec<String> = report["added"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["id"].as_str().unwrap().to_string())
+        .collect();
+    let batch =
+        serde_json::json!({"ids": ids, "action": "move", "folder": " 新 / 文件夹 "}).to_string();
+    let (status, body) = call(&app, "POST", "/api/admin/feeds/batch", Some(ADMIN), &batch).await;
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::OK, r#"{"updated":2}"#)
+    );
+    let batch =
+        serde_json::json!({"ids": [ids[0].clone(), "missing"], "action": "refresh"}).to_string();
+    let (status, body) = call(&app, "POST", "/api/admin/feeds/batch", Some(ADMIN), &batch).await;
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::OK, r#"{"updated":1}"#)
+    );
+    let batch =
+        serde_json::json!({"ids": [ids[1].clone()], "action": "move", "folder": ""}).to_string();
+    assert_eq!(
+        call(&app, "POST", "/api/admin/feeds/batch", Some(ADMIN), &batch)
+            .await
+            .0,
+        StatusCode::OK
+    );
     assert_eq!(
         call(&app, "POST", "/api/admin/opml", Some(ADMIN), "<rss/>")
             .await
@@ -196,4 +231,13 @@ async fn opml_import_export_and_feed_edits() {
     );
     let reparsed = agentero_rss_server::opml::parse(&xml).unwrap();
     assert_eq!(reparsed.len(), 3);
+    let a = reparsed
+        .iter()
+        .find(|f| f.url == "https://a.example/feed")
+        .unwrap();
+    assert_eq!(a.folder, "新/文件夹");
+    assert!(reparsed
+        .iter()
+        .filter(|f| f.url != a.url)
+        .all(|f| f.folder.is_empty()));
 }

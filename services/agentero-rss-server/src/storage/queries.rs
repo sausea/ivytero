@@ -16,6 +16,8 @@ pub struct FeedRow {
     pub id: String,
     pub url: String,
     pub title: String,
+    /// OPML folder path, segments joined by `/`; empty = top level.
+    pub folder: String,
     pub enabled: bool,
     pub refresh_interval_secs: i64,
     pub added_at: String,
@@ -76,7 +78,8 @@ pub struct UpsertStats {
     pub unchanged: usize,
 }
 
-const FEED_COLUMNS: &str = "f.id, f.url, f.title, f.enabled, f.refresh_interval_secs, f.added_at,
+const FEED_COLUMNS: &str =
+    "f.id, f.url, f.title, f.folder, f.enabled, f.refresh_interval_secs, f.added_at,
     f.last_attempt_at, f.last_success_at, f.next_fetch_at, f.failure_count, f.last_error,
     (SELECT COUNT(*) FROM articles a WHERE a.feed_id = f.id)";
 
@@ -88,15 +91,16 @@ fn map_feed(row: &Row<'_>) -> rusqlite::Result<FeedRow> {
         id: row.get(0)?,
         url: row.get(1)?,
         title: row.get(2)?,
-        enabled: row.get::<_, i64>(3)? != 0,
-        refresh_interval_secs: row.get(4)?,
-        added_at: row.get(5)?,
-        last_attempt_at: row.get(6)?,
-        last_success_at: row.get(7)?,
-        next_fetch_at: row.get(8)?,
-        failure_count: row.get(9)?,
-        last_error: row.get(10)?,
-        article_count: row.get(11)?,
+        folder: row.get(3)?,
+        enabled: row.get::<_, i64>(4)? != 0,
+        refresh_interval_secs: row.get(5)?,
+        added_at: row.get(6)?,
+        last_attempt_at: row.get(7)?,
+        last_success_at: row.get(8)?,
+        next_fetch_at: row.get(9)?,
+        failure_count: row.get(10)?,
+        last_error: row.get(11)?,
+        article_count: row.get(12)?,
     })
 }
 
@@ -208,6 +212,33 @@ pub fn set_title(conn: &Connection, id: &str, title: &str) -> StorageResult<bool
     let changed = conn.execute(
         "UPDATE feeds SET title = ?1 WHERE id = ?2",
         params![title, id],
+    )?;
+    Ok(changed > 0)
+}
+
+pub const MAX_FOLDER_CHARS: usize = 200;
+
+/// Trim each `/`-separated segment, collapse whitespace and drop empty ones.
+pub fn normalize_folder(raw: &str) -> StorageResult<String> {
+    let folder = raw
+        .split('/')
+        .map(|seg| seg.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|seg| !seg.is_empty())
+        .collect::<Vec<_>>()
+        .join("/");
+    if folder.chars().count() > MAX_FOLDER_CHARS {
+        return Err(StorageError(format!(
+            "folder must be at most {MAX_FOLDER_CHARS} characters"
+        )));
+    }
+    Ok(folder)
+}
+
+pub fn set_folder(conn: &Connection, id: &str, folder: &str) -> StorageResult<bool> {
+    let folder = normalize_folder(folder)?;
+    let changed = conn.execute(
+        "UPDATE feeds SET folder = ?1 WHERE id = ?2",
+        params![folder, id],
     )?;
     Ok(changed > 0)
 }

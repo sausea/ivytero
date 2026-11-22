@@ -65,6 +65,7 @@ async fn list_feeds(State(state): State<AppState>) -> ApiResult<FeedList> {
 struct AddFeed {
     url: String,
     title: Option<String>,
+    folder: Option<String>,
     interval_secs: Option<i64>,
 }
 
@@ -77,6 +78,7 @@ fn add_one(
     conn: &rusqlite::Connection,
     url: &str,
     title: Option<&str>,
+    folder: &str,
     interval: i64,
 ) -> storage::StorageResult<AddOutcome> {
     let taken: i64 = conn.query_row("SELECT COUNT(*) FROM feeds WHERE url = ?1", [url], |r| {
@@ -90,7 +92,18 @@ fn add_one(
         .map(str::trim)
         .filter(|t| !t.is_empty())
         .unwrap_or(url);
-    storage::add_feed(conn, url, title, interval).map(|f| AddOutcome::Added(Box::new(f)))
+    let feed = storage::add_feed(conn, url, title, interval)?;
+    if folder.is_empty() {
+        return Ok(AddOutcome::Added(Box::new(feed)));
+    }
+    storage::set_folder(conn, &feed.id, folder)?;
+    let feed = storage::get_feed(conn, &feed.id)?
+        .ok_or_else(|| storage::StorageError("feed vanished after insert".into()))?;
+    Ok(AddOutcome::Added(Box::new(feed)))
+}
+
+fn folder_arg(raw: Option<&str>) -> Result<String, ApiError> {
+    storage::normalize_folder(raw.unwrap_or("")).map_err(|e| ApiError::bad_request(e.0))
 }
 
 fn interval_or_default(state: &AppState, secs: Option<i64>) -> Result<i64, ApiError> {
@@ -105,9 +118,10 @@ async fn add_feed(
     let url = normalize_feed_url(&body.url)
         .map_err(|_| ApiError::bad_request("not an http(s) feed URL"))?;
     let interval = interval_or_default(&state, body.interval_secs)?;
+    let folder = folder_arg(body.folder.as_deref())?;
     let outcome = state
         .archive
-        .run(move |c| add_one(c, &url, body.title.as_deref(), interval))
+        .run(move |c| add_one(c, &url, body.title.as_deref(), &folder, interval))
         .await?;
     match outcome {
         AddOutcome::Added(feed) => Ok((StatusCode::CREATED, Json(*feed))),
@@ -125,6 +139,7 @@ struct PatchFeed {
     enabled: Option<bool>,
     interval_secs: Option<i64>,
     title: Option<String>,
+    folder: Option<String>,
 }
 
 async fn patch_feed(
@@ -138,6 +153,11 @@ async fn patch_feed(
     if body.title.as_deref().is_some_and(|t| t.trim().is_empty()) {
         return Err(ApiError::bad_request("title must not be empty"));
     }
+    let folder = body
+        .folder
+        .as_deref()
+        .map(|f| folder_arg(Some(f)))
+        .transpose()?;
     state
         .archive
         .run(move |c| {
@@ -152,6 +172,9 @@ async fn patch_feed(
             }
             if let Some(title) = &body.title {
                 storage::set_title(c, &feed_id, title)?;
+            }
+            if let Some(folder) = &folder {
+                storage::set_folder(c, &feed_id, folder)?;
             }
             storage::get_feed(c, &feed_id)
         })
@@ -173,6 +196,62 @@ async fn refresh_feed(
     } else {
         Err(ApiError::not_found("feed not found"))
     }
+}
+
+const MAX_BATCH: usize = 10_000;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum BatchAction {
+    Refresh,
+    Enable,
+    Disable,
+    Move,
+}
+
+#[derive(Deserialize)]
+struct Batch {
+    ids: Vec<String>,
+    action: BatchAction,
+    folder: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BatchReport {
+    updated: usize,
+}
+
+async fn batch(State(state): State<AppState>, Json(body): Json<Batch>) -> ApiResult<BatchReport> {
+    if body.ids.len() > MAX_BATCH {
+        return Err(ApiError::bad_request(format!(
+            "at most {MAX_BATCH} feeds per batch"
+        )));
+    }
+    let folder = match body.action {
+        BatchAction::Move => Some(folder_arg(body.folder.as_deref())?),
+        _ => None,
+    };
+    let updated = state
+        .archive
+        .run(move |c| {
+            let tx = c.transaction()?;
+            let mut updated = 0;
+            for id in &body.ids {
+                let changed = match body.action {
+                    BatchAction::Refresh => storage::schedule_now(&tx, id)?,
+                    BatchAction::Enable => storage::set_enabled(&tx, id, true)?,
+                    BatchAction::Disable => storage::set_enabled(&tx, id, false)?,
+                    BatchAction::Move => {
+                        storage::set_folder(&tx, id, folder.as_deref().unwrap_or(""))?
+                    }
+                };
+                updated += usize::from(changed);
+            }
+            tx.commit()?;
+            Ok(updated)
+        })
+        .await?;
+    Ok(Json(BatchReport { updated }))
 }
 
 #[derive(Serialize)]
@@ -205,7 +284,8 @@ async fn import_opml(State(state): State<AppState>, body: String) -> ApiResult<I
                     });
                     continue;
                 };
-                match add_one(c, &url, entry.title.as_deref(), interval)? {
+                let folder = storage::normalize_folder(&entry.folder)?;
+                match add_one(c, &url, entry.title.as_deref(), &folder, interval)? {
                     AddOutcome::Added(feed) => report.added.push(*feed),
                     AddOutcome::Duplicate => report.skipped.push(Skipped {
                         url,
@@ -239,6 +319,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
     let api = Router::new()
         .route("/info", get(info))
         .route("/feeds", get(list_feeds).post(add_feed))
+        .route("/feeds/batch", post(batch))
         .route("/feeds/{feed_id}", axum::routing::patch(patch_feed))
         .route("/feeds/{feed_id}/refresh", post(refresh_feed))
         .route("/articles", get(articles::list))

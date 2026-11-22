@@ -250,3 +250,52 @@ td.actions button {
 [hidden] {
 	display: none !important;
 }
+
+.stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+.stat {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 8px 14px;
+	min-width: 96px;
+	display: flex;
+	flex-direction: column;
+}
+.stat strong {
+	font-size: 18px;
+	font-weight: 600;
+}
+.stat span {
+	color: var(--muted);
+	font-size: 12px;
+}
+.stat.bad strong {
+	color: var(--bad);
+}
+.bulk {
+	background: var(--card);
+	border: 1px solid var(--accent);
+	border-radius: 10px;
+	padding: 6px 10px;
+	position: sticky;
+	top: 56px;
+	z-index: 1;
+}
+th.check,
+td.check {
+	width: 32px;
+	padding-right: 0;
+}
+tr.group td {
+	background: var(--bg);
+	font-weight: 600;
+}
+tr.group .folder {
+	padding: 0 8px 0 0;
+	font-weight: 600;
+}

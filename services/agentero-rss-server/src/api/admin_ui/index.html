@@ -37,10 +37,18 @@
       <button type="button" id="exportBtn" data-i18n="exportOpml"></button>
       <button type="button" id="reloadFeeds" class="ghost" data-i18n="reload"></button>
     </div>
-    <p id="feedSummary" class="muted"></p>
+    <div id="stats" class="stats"></div>
+    <div id="bulkBar" class="toolbar bulk" hidden>
+      <span id="selCount"></span>
+      <button type="button" id="bulkRefresh" class="primary" data-i18n="refresh"></button>
+      <button type="button" id="bulkMove" data-i18n="moveFolder"></button>
+      <button type="button" id="bulkEnable" data-i18n="enable"></button>
+      <button type="button" id="bulkDisable" data-i18n="disable"></button>
+      <button type="button" id="bulkClear" class="ghost" data-i18n="clearSelection"></button>
+    </div>
     <table>
       <thead><tr>
-        <th data-i18n="feed"></th><th data-i18n="status"></th><th data-i18n="articleCount"></th>
+        <th class="check"><input id="selectAll" type="checkbox" data-i18n-aria="selectAll"></th><th data-i18n="feed"></th><th data-i18n="status"></th><th data-i18n="articleCount"></th>
         <th data-i18n="interval"></th><th data-i18n="lastSuccess"></th><th></th>
       </tr></thead>
       <tbody id="feedRows"></tbody>

@@ -1,7 +1,8 @@
-//! OPML 1.0/2.0 subscription lists: import every `<outline xmlUrl=…>` (nested
-//! folders flattened) and export the archive's feeds.
+//! OPML 1.0/2.0 subscription lists: import every `<outline xmlUrl=…>` with
+//! its enclosing folder path, and export feeds nested by folder.
 
 use crate::storage::FeedRow;
+use std::collections::BTreeMap;
 
 pub const MAX_OPML_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_OUTLINES: usize = 5_000;
@@ -10,6 +11,8 @@ pub const MAX_OUTLINES: usize = 5_000;
 pub struct OpmlFeed {
     pub url: String,
     pub title: Option<String>,
+    /// Enclosing folder outlines joined by `/` (a `/` inside a name becomes `／`).
+    pub folder: String,
 }
 
 pub fn parse(text: &str) -> Result<Vec<OpmlFeed>, String> {
@@ -40,9 +43,24 @@ pub fn parse(text: &str) -> Result<Vec<OpmlFeed>, String> {
             .or_else(|| node.attribute("text"))
             .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
             .filter(|t| !t.is_empty());
+        let mut folders: Vec<String> = node
+            .ancestors()
+            .skip(1)
+            .filter(|a| a.has_tag_name("outline") && a.attribute("xmlUrl").is_none())
+            .filter_map(|a| a.attribute("title").or_else(|| a.attribute("text")))
+            .map(|n| {
+                n.split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .replace('/', "／")
+            })
+            .filter(|n| !n.is_empty())
+            .collect();
+        folders.reverse();
         out.push(OpmlFeed {
             url: url.to_string(),
             title,
+            folder: folders.join("/"),
         });
     }
     Ok(out)
@@ -71,15 +89,44 @@ pub fn export(feeds: &[FeedRow], created: &str) -> String {
         "  <head>\n    <title>Agentero cloud RSS</title>\n    <dateCreated>{}</dateCreated>\n  </head>\n  <body>\n",
         escape(created)
     ));
+    let mut root = Folder::default();
     for f in feeds {
-        let title = escape(&f.title);
-        s.push_str(&format!(
-            "    <outline type=\"rss\" text=\"{title}\" title=\"{title}\" xmlUrl=\"{}\"/>\n",
-            escape(&f.url)
-        ));
+        let mut node = &mut root;
+        for seg in f.folder.split('/').filter(|s| !s.is_empty()) {
+            node = node.children.entry(seg.to_string()).or_default();
+        }
+        node.feeds.push(f);
     }
+    root.write(&mut s, 2);
     s.push_str("  </body>\n</opml>\n");
     s
+}
+
+#[derive(Default)]
+struct Folder<'a> {
+    feeds: Vec<&'a FeedRow>,
+    children: BTreeMap<String, Folder<'a>>,
+}
+
+impl Folder<'_> {
+    fn write(&self, s: &mut String, depth: usize) {
+        let pad = "  ".repeat(depth);
+        for f in &self.feeds {
+            let title = escape(&f.title);
+            s.push_str(&format!(
+                "{pad}<outline type=\"rss\" text=\"{title}\" title=\"{title}\" xmlUrl=\"{}\"/>\n",
+                escape(&f.url)
+            ));
+        }
+        for (name, child) in &self.children {
+            let name = escape(name);
+            s.push_str(&format!(
+                "{pad}<outline text=\"{name}\" title=\"{name}\">\n"
+            ));
+            child.write(s, depth + 1);
+            s.push_str(&format!("{pad}</outline>\n"));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -87,9 +134,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flattens_folders_and_skips_folder_rows() {
+    fn keeps_folder_paths_and_skips_folder_rows() {
         let text = r#"<?xml version="1.0"?><opml version="1.0"><head/><body>
-            <outline text="Tech"><outline text="A &amp; B" xmlUrl="https://a.example/feed"/></outline>
+            <outline text="Tech"><outline text=" AI / ML "><outline text="A &amp; B" xmlUrl="https://a.example/feed"/></outline></outline>
             <outline title="中文" text="ignored" xmlUrl=" https://b.example/rss "/>
             <outline text="no url"/></body></opml>"#;
         let feeds = parse(text).unwrap();
@@ -98,11 +145,13 @@ mod tests {
             [
                 OpmlFeed {
                     url: "https://a.example/feed".into(),
-                    title: Some("A & B".into())
+                    title: Some("A & B".into()),
+                    folder: "Tech/AI ／ ML".into(),
                 },
                 OpmlFeed {
                     url: "https://b.example/rss".into(),
-                    title: Some("中文".into())
+                    title: Some("中文".into()),
+                    folder: String::new(),
                 },
             ]
         );
