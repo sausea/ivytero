@@ -95,11 +95,13 @@ pub fn marks(
 
 /// Lower bound for an unread-only scan: the watermark, or just before the
 /// oldest article explicitly marked unread so it is not filtered out.
+/// `also_oldest` widens it for articles unread elsewhere (the run snapshot).
 pub fn unread_scan_since(
     conn: &Connection,
     server_id: &str,
     since: &str,
     feed_id: Option<&str>,
+    also_oldest: Option<&str>,
 ) -> Result<String, AppError> {
     let oldest: Option<String> = conn.query_row(
         "SELECT MIN(first_seen_at) FROM cloud_read_marks
@@ -107,6 +109,10 @@ pub fn unread_scan_since(
         params![server_id, feed_id],
         |r| r.get(0),
     )?;
+    let oldest = match (oldest, also_oldest) {
+        (Some(a), Some(b)) => Some(a.min(b.to_string())),
+        (a, b) => a.or_else(|| b.map(str::to_string)),
+    };
     let Some(oldest) = oldest.filter(|o| o.as_str() <= since) else {
         return Ok(since.to_string());
     };
@@ -118,19 +124,66 @@ pub fn unread_scan_since(
         .unwrap_or_else(|_| since.to_string()))
 }
 
-/// Whether "hide read" keeps an article listed: it was unread when this
-/// client run started (`session_since` watermark, `session_start` time),
-/// even if it has been read since.
-pub fn listed_when_hiding_read(
-    session_since: &str,
-    session_start: &str,
-    first_seen_at: &str,
-    mark: Option<&(bool, String)>,
-) -> bool {
-    match mark {
-        Some((true, at)) => at.as_str() >= session_start,
-        Some((false, _)) => true,
-        None => first_seen_at > session_since,
+/// This device's read state for one server as this client run first saw it.
+/// "Hide read" keeps listing what was unread then, even after it is read,
+/// so items read during a run disappear only at the next launch.
+#[derive(Debug, Default)]
+pub struct Snapshot {
+    since: String,
+    /// article id -> (read, feed id, first seen at)
+    marks: HashMap<String, (bool, String, String)>,
+}
+
+impl Snapshot {
+    pub fn load(conn: &Connection, server_id: &str, since: &str) -> Result<Self, AppError> {
+        let mut stmt = conn.prepare(
+            "SELECT article_id, read, feed_id, first_seen_at FROM cloud_read_marks
+             WHERE server_id = ?1",
+        )?;
+        let marks = stmt
+            .query_map([server_id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    (r.get::<_, i64>(1)? != 0, r.get(2)?, r.get(3)?),
+                ))
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            since: since.to_string(),
+            marks,
+        })
+    }
+
+    pub fn since(&self) -> &str {
+        &self.since
+    }
+
+    fn unread(&self, id: &str, first_seen_at: &str) -> bool {
+        match self.marks.get(id) {
+            Some((read, ..)) => !read,
+            None => first_seen_at > self.since.as_str(),
+        }
+    }
+
+    /// Oldest article explicitly unread at launch, optionally in one feed.
+    pub fn oldest_unread(&self, feed_id: Option<&str>) -> Option<&str> {
+        self.marks
+            .values()
+            .filter(|(read, feed, _)| !read && feed_id.is_none_or(|f| f == feed))
+            .map(|(.., first)| first.as_str())
+            .min()
+    }
+
+    /// Whether "hide read" lists an article: unread now, or unread when this
+    /// run started.
+    pub fn listed(
+        &self,
+        since: &str,
+        id: &str,
+        first_seen_at: &str,
+        mark: Option<&(bool, String)>,
+    ) -> bool {
+        self.unread(id, first_seen_at) || read_at(since, first_seen_at, mark).is_none()
     }
 }
 
@@ -272,16 +325,19 @@ mod tests {
                 .as_deref(),
             Some(NOW)
         );
-        assert_eq!(unread_scan_since(&conn, SID, T0, None).unwrap(), T0);
+        assert_eq!(unread_scan_since(&conn, SID, T0, None, None).unwrap(), T0);
         assert_eq!(
             set_read(&conn, SID, T0, &art("o1", OLD), false, NOW).unwrap(),
             None
         );
         assert_eq!(
-            unread_scan_since(&conn, SID, T0, Some("f")).unwrap(),
+            unread_scan_since(&conn, SID, T0, Some("f"), None).unwrap(),
             "2025-12-31T23:59:59.999Z"
         );
-        assert_eq!(unread_scan_since(&conn, SID, T0, Some("g")).unwrap(), T0);
+        assert_eq!(
+            unread_scan_since(&conn, SID, T0, Some("g"), None).unwrap(),
+            T0
+        );
         let counts = unread_counts(&conn, SID, T0, &HashMap::from([("f".into(), 3)])).unwrap();
         assert_eq!(counts["f"], 3);
         let m = marks(&conn, SID, &["n1", "o1", "x"]).unwrap();
@@ -308,5 +364,46 @@ mod tests {
         advance(&mut conn, SID, NOW).unwrap();
         assert!(marks(&conn, SID, &["n2"]).unwrap().is_empty());
         assert_eq!(read_at(NOW, NEW, None).as_deref(), Some(NOW));
+    }
+
+    #[test]
+    fn snapshot_lists_what_was_unread_at_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = open_at(&dir.path().join("r.sqlite")).unwrap();
+        advance(&mut conn, SID, T0).unwrap();
+        set_read(&conn, SID, T0, &art("read_new", NEW), true, T0).unwrap();
+        set_read(&conn, SID, T0, &art("unread_old", OLD), false, T0).unwrap();
+        let snap = Snapshot::load(&conn, SID, T0).unwrap();
+        assert_eq!(snap.oldest_unread(Some("f")), Some(OLD));
+        assert_eq!(snap.oldest_unread(Some("g")), None);
+
+        // This run reads everything, per feed and then globally.
+        set_read(&conn, SID, T0, &art("unread_old", OLD), true, NOW).unwrap();
+        let feed = [
+            ("read_new".into(), NEW.into()),
+            ("fresh".into(), NEW.into()),
+        ];
+        mark_feed_read(&mut conn, SID, T0, "f", &feed, NOW).unwrap();
+        advance(&mut conn, SID, NOW).unwrap();
+        assert!(
+            unread_scan_since(&conn, SID, T0, Some("f"), snap.oldest_unread(Some("f")))
+                .unwrap()
+                .as_str()
+                < OLD
+        );
+
+        let listed = |id: &str, first: &str| {
+            let m = marks(&conn, SID, &[id]).unwrap();
+            snap.listed(NOW, id, first, m.get(id))
+        };
+        assert!(listed("fresh", NEW));
+        assert!(listed("unread_old", OLD));
+        assert!(!listed("read_new", NEW));
+        assert!(!listed("other_old", OLD));
+
+        // Next launch: everything read is hidden.
+        let next = Snapshot::load(&conn, SID, NOW).unwrap();
+        assert!(!next.listed(NOW, "fresh", NEW, None));
+        assert!(!next.listed(NOW, "unread_old", OLD, None));
     }
 }

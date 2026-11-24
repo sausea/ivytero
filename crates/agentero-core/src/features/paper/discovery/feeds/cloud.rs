@@ -14,7 +14,7 @@ use crate::{http, paths};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use url::Url;
 
@@ -351,29 +351,35 @@ fn to_item(article: WireArticle, with_body: bool) -> FeedItem {
 
 /// This device's read watermark for the archive, seeded from its clock once.
 async fn read_scope(base: &str, token: &str) -> Result<(String, String), AppError> {
-    super::session_started_at();
     let server_id = server_id().await?;
     if let Some(since) = cloud_reads::unread_since(&cloud_reads::open()?, &server_id)? {
-        session_since(&server_id, &since);
+        snapshot(&server_id, &since)?;
         return Ok((server_id, since));
     }
     let now = archive_now(base, token).await?;
     cloud_reads::advance(&mut cloud_reads::open()?, &server_id, &now)?;
-    session_since(&server_id, &now);
+    snapshot(&server_id, &now)?;
     Ok((server_id, now))
 }
 
-/// The server's read watermark as first seen in this client run; later
-/// "mark all read" moves the stored one but not this.
-fn session_since(server_id: &str, since: &str) -> String {
-    static SEEN: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+/// The server's read state as first seen in this client run; later marks
+/// and "mark all read" change the stored state but not this.
+fn snapshot(server_id: &str, since: &str) -> Result<Arc<cloud_reads::Snapshot>, AppError> {
+    static SEEN: OnceLock<Mutex<HashMap<String, Arc<cloud_reads::Snapshot>>>> = OnceLock::new();
     let mut seen = SEEN
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    seen.entry(server_id.to_string())
-        .or_insert_with(|| since.to_string())
-        .clone()
+    if let Some(snap) = seen.get(server_id) {
+        return Ok(snap.clone());
+    }
+    let snap = Arc::new(cloud_reads::Snapshot::load(
+        &cloud_reads::open()?,
+        server_id,
+        since,
+    )?);
+    seen.insert(server_id.to_string(), snap.clone());
+    Ok(snap)
 }
 
 async fn archive_now(base: &str, token: &str) -> Result<String, AppError> {
@@ -446,13 +452,15 @@ pub async fn items(
     if let Some(id) = feed_id.filter(|s| !s.is_empty()) {
         query.push(("feedId", id.to_string()));
     }
-    let session_since = session_since(&server_id, &since);
+    let snap = snapshot(&server_id, &since)?;
     if unread_only {
+        let feed = feed_id.filter(|s| !s.is_empty());
         let scan_since = cloud_reads::unread_scan_since(
             &cloud_reads::open()?,
             &server_id,
-            &session_since,
-            feed_id.filter(|s| !s.is_empty()),
+            snap.since(),
+            feed,
+            snap.oldest_unread(feed),
         )?;
         query.push(("newSince", scan_since));
     }
@@ -468,14 +476,7 @@ pub async fn items(
             let marks = cloud_reads::marks(&cloud_reads::open()?, &server_id, &ids)?;
             page.items
                 .into_iter()
-                .filter(|a| {
-                    cloud_reads::listed_when_hiding_read(
-                        &session_since,
-                        super::session_started_at(),
-                        &a.first_seen_at,
-                        marks.get(&a.id),
-                    )
-                })
+                .filter(|a| snap.listed(&since, &a.id, &a.first_seen_at, marks.get(&a.id)))
                 .collect()
         } else {
             page.items
