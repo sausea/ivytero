@@ -162,7 +162,9 @@ function UnreadCount({ value }: { value: number | null }) {
 
 function FeedSubMenu({
 	menu,
+	cloud,
 	onClose,
+	onMarkRead,
 	onRename,
 	onCopyUrl,
 	onRefresh,
@@ -170,7 +172,10 @@ function FeedSubMenu({
 	onRemove,
 }: {
 	menu: FeedSubMenuState;
+	/** Cloud subscriptions are read-only: only read state and URL apply. */
+	cloud: boolean;
 	onClose: () => void;
+	onMarkRead: (sub: FeedSub) => void;
 	onRename: (sub: FeedSub) => void;
 	onCopyUrl: (sub: FeedSub) => void;
 	onRefresh: (sub: FeedSub) => void;
@@ -220,22 +225,32 @@ function FeedSubMenu({
 			point={{ x: menu.x, y: menu.y }}
 			className="z-[2000] min-w-44"
 		>
-			<FloatingMenuItem onClick={() => run(onRename)}>
-				{t("plaza.feeds.rename")}
+			<FloatingMenuItem onClick={() => run(onMarkRead)}>
+				{t("plaza.feeds.markAllRead")}
 			</FloatingMenuItem>
+			<FloatingMenuSeparator />
+			{cloud ? null : (
+				<FloatingMenuItem onClick={() => run(onRename)}>
+					{t("plaza.feeds.rename")}
+				</FloatingMenuItem>
+			)}
 			<FloatingMenuItem onClick={() => run(onCopyUrl)}>
 				{t("plaza.feeds.copyUrl")}
 			</FloatingMenuItem>
-			<FloatingMenuItem onClick={() => run(onRefresh)}>
-				{t("plaza.feeds.refreshOne")}
-			</FloatingMenuItem>
-			<FloatingMenuItem onClick={() => run(onPin)}>
-				{menu.sub.pinned ? t("plaza.feeds.unpin") : t("plaza.feeds.pin")}
-			</FloatingMenuItem>
-			<FloatingMenuSeparator />
-			<FloatingMenuItem variant="destructive" onClick={() => run(onRemove)}>
-				{t("plaza.feeds.remove")}
-			</FloatingMenuItem>
+			{cloud ? null : (
+				<>
+					<FloatingMenuItem onClick={() => run(onRefresh)}>
+						{t("plaza.feeds.refreshOne")}
+					</FloatingMenuItem>
+					<FloatingMenuItem onClick={() => run(onPin)}>
+						{menu.sub.pinned ? t("plaza.feeds.unpin") : t("plaza.feeds.pin")}
+					</FloatingMenuItem>
+					<FloatingMenuSeparator />
+					<FloatingMenuItem variant="destructive" onClick={() => run(onRemove)}>
+						{t("plaza.feeds.remove")}
+					</FloatingMenuItem>
+				</>
+			)}
 		</FloatingMenu>
 	);
 }
@@ -804,21 +819,24 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		[t],
 	);
 
-	const onMarkAllRead = useCallback(async () => {
-		setMarkingAll(true);
-		try {
-			setSubs(
-				[...(await feedsMarkAllRead(cloudRef.current, selectedId))].sort(
-					compareFeedSubs,
-				),
-			);
-			await loadItems(selectedId, false);
-		} catch (error) {
-			toastHostError(errorText(error), t);
-		} finally {
-			setMarkingAll(false);
-		}
-	}, [loadItems, selectedId, t]);
+	const onMarkAllRead = useCallback(
+		async (feedId: string | null = selectedId) => {
+			setMarkingAll(true);
+			try {
+				setSubs(
+					[...(await feedsMarkAllRead(cloudRef.current, feedId))].sort(
+						compareFeedSubs,
+					),
+				);
+				await loadItems(selectedId, false);
+			} catch (error) {
+				toastHostError(errorText(error), t);
+			} finally {
+				setMarkingAll(false);
+			}
+		},
+		[loadItems, selectedId, t],
+	);
 
 	const openFeedItem = useCallback(
 		(item: FeedItem) => {
@@ -1277,10 +1295,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 															setSelectedId(sub.id);
 															void loadItems(sub.id);
 														}}
-														onContextMenu={(event) => {
-															if (cloud) return;
-															openFeedSubMenu(sub, event, setSubMenu);
-														}}
+														onContextMenu={(event) =>
+															openFeedSubMenu(sub, event, setSubMenu)
+														}
 														className={cn(
 															"flex w-full flex-col rounded-lg py-1.5 pr-7 pl-2.5 text-left",
 															"transition-colors duration-150 ease-out",
@@ -1421,7 +1438,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			{subMenu ? (
 				<FeedSubMenu
 					menu={subMenu}
+					cloud={cloud}
 					onClose={closeSubMenu}
+					onMarkRead={(sub) => void onMarkAllRead(sub.id)}
 					onRename={(sub) => {
 						setRenameTarget(sub);
 						setRenameTitle(sub.title);
