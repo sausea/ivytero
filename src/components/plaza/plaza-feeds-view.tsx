@@ -527,6 +527,9 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const [bookmarkTarget, setBookmarkTarget] = useState<FeedItem | null>(null);
 	const [panesEl, setPanesEl] = useState<HTMLDivElement | null>(null);
 	const [widePanes, setWidePanes] = useState(false);
+	const widePanesRef = useRef(widePanes);
+	widePanesRef.current = widePanes;
+	const openFeedItemRef = useRef<(item: FeedItem) => void>(() => {});
 
 	useEffect(() => {
 		if (!panesEl) return;
@@ -547,9 +550,20 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	}, []);
 
 	const loadItems = useCallback(
-		async (subscriptionId: string | null, closeDetail = true) => {
+		async (
+			subscriptionId: string | null,
+			closeDetail = true,
+			openFirst = false,
+		) => {
 			const request = ++itemsRequest.current;
 			if (closeDetail) setOpenItem(null);
+			/** Feed switch in the three-pane layout shows its first article. */
+			const show = (rows: FeedItem[]) => {
+				setItems(rows);
+				if (openFirst && widePanesRef.current && rows[0]) {
+					openFeedItemRef.current(rows[0]);
+				}
+			};
 			try {
 				if (starredOnlyRef.current) {
 					nextCursorRef.current = null;
@@ -563,7 +577,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 						? subsRef.current.find((row) => row.id === subscriptionId)?.title
 						: undefined;
 					setBookmarks(new Map(rows.map((row) => [row.articleId, row])));
-					setItems(
+					show(
 						rows
 							.filter((row) => !subTitle || row.feedTitle === subTitle)
 							.map(bookmarkToFeedItem),
@@ -578,7 +592,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					if (request !== itemsRequest.current) return;
 					nextCursorRef.current = page.nextCursor;
 					setHasMore(page.nextCursor !== null);
-					setItems(page.items);
+					show(page.items);
 					return;
 				}
 				nextCursorRef.current = null;
@@ -587,7 +601,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 					subscriptionId: subscriptionId ?? undefined,
 					filter: hideReadRef.current ? "unread_session" : "all",
 				});
-				if (request === itemsRequest.current) setItems(rows);
+				if (request === itemsRequest.current) show(rows);
 			} catch (error) {
 				toastHostError(errorText(error), t);
 			}
@@ -845,6 +859,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		},
 		[setRead],
 	);
+	openFeedItemRef.current = openFeedItem;
 
 	/**
 	 * Chip click in the Agent composer: reopen this item's detail. The list
@@ -1223,7 +1238,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 								type="button"
 								onClick={() => {
 									setSelectedId(null);
-									void loadItems(null);
+									void loadItems(null, true, true);
 								}}
 								className={cn(
 									"flex w-full items-center gap-1 rounded-lg px-2.5 py-1.5 text-left text-sm",
@@ -1285,7 +1300,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 														type="button"
 														onClick={() => {
 															setSelectedId(sub.id);
-															void loadItems(sub.id);
+															void loadItems(sub.id, true, true);
 														}}
 														onContextMenu={(event) =>
 															openFeedSubMenu(sub, event, setSubMenu)
