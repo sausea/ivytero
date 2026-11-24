@@ -530,6 +530,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const widePanesRef = useRef(widePanes);
 	widePanesRef.current = widePanes;
 	const openFeedItemRef = useRef<(item: FeedItem) => void>(() => {});
+	const openItemRef = useRef(openItem);
+	openItemRef.current = openItem;
 
 	useEffect(() => {
 		if (!panesEl) return;
@@ -560,7 +562,13 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 			/** Feed switch in the three-pane layout shows its first article. */
 			const show = (rows: FeedItem[]) => {
 				setItems(rows);
-				if (openFirst && widePanesRef.current && rows[0]) {
+				// A click made while the list was loading wins over the default.
+				if (
+					openFirst &&
+					widePanesRef.current &&
+					rows[0] &&
+					!openItemRef.current
+				) {
 					openFeedItemRef.current(rows[0]);
 				}
 			};

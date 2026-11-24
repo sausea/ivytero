@@ -775,7 +775,16 @@ pub async fn resolve_body(id: &str) -> Result<FeedItem, AppError> {
         return persist_resolved(&conn, id, &body, None);
     }
     let url = existing.url.clone().unwrap_or_default();
-    match fetch_article(&url, &existing.title).await {
+    // The first request after launch often hits a cold proxy/DNS path; one
+    // retry keeps the detail pane from settling on the RSS excerpt.
+    let fetched = match fetch_article(&url, &existing.title).await {
+        Err(e) if !e.to_string().starts_with("feeds.http:") => {
+            log::info!(target: "agentero::feeds", "article body fetch retry for {url}: {e}");
+            fetch_article(&url, &existing.title).await
+        }
+        other => other,
+    };
+    match fetched {
         Ok(article) => {
             let chosen = if article.markdown.chars().count() + 40 >= rss.chars().count() {
                 article.markdown
