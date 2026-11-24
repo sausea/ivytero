@@ -130,6 +130,17 @@ const KATEX_UNSUPPORTED_ENVS: &[&str] = &[
 /// We pull out `\begin{env}...\end{env}` blocks, `$$...$$` display math and
 /// `$...$` inline math, replace them with text placeholders, then restore
 /// them as `$$...$$` / `$...$` after conversion.
+/// Pandoc's `$…$` rule, so prices ("$5 and $7") and shell prompts in code
+/// blocks are not swallowed as math across tags and paragraphs.
+fn is_inline_math(inner: &str, next: Option<char>) -> bool {
+    !inner.is_empty()
+        && inner.len() <= 300
+        && !inner.starts_with(char::is_whitespace)
+        && !inner.ends_with(char::is_whitespace)
+        && !inner.contains(['<', '>', '\n'])
+        && !next.is_some_and(|c| c.is_ascii_digit())
+}
+
 fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
     let mut out = String::with_capacity(html.len());
     let mut blocks: Vec<(String, String)> = Vec::new();
@@ -189,6 +200,10 @@ fn extract_latex_math(html: &str) -> (String, Vec<(String, String)>) {
                 // Make sure it's not $$ on the closing side either
                 if abs_end < rest.len() && rest.as_bytes()[abs_end] == b'$' {
                     search_from = abs_end + 1;
+                    continue;
+                }
+                if !is_inline_math(&rest[after..abs_end - 1], rest[abs_end..].chars().next()) {
+                    search_from = after;
                     continue;
                 }
                 let content = rest[abs_dollar..abs_end].to_string();
@@ -644,5 +659,14 @@ mod tests {
         assert!(md.contains("\\rule[-1.2ex]{0pt}{3.5ex}"), "{md}");
         assert!(md.contains("\\begin{array}"), "{md}");
         assert!(!md.contains("\\\\rule"), "{md}");
+    }
+
+    #[test]
+    fn dollar_prices_and_shell_prompts_are_not_math() {
+        let html = r#"<p>Shares rose to $6.90 and $7 today.</p><pre><code><span>$</span><span> rustup update</span></code></pre><p>If you don't have <a href="https://e.x">rustup</a> yet.</p><p>Costs $5, not $ 10.</p>"#;
+        let md = html_to_markdown(html);
+        assert!(md.contains("```\n$ rustup update\n```"), "{md}");
+        assert!(md.contains("[rustup](https://e.x)"), "{md}");
+        assert!(md.contains("\n\nCosts"), "{md}");
     }
 }

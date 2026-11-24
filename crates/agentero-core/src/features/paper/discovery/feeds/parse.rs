@@ -144,7 +144,15 @@ fn parse_entry(entry: Entry) -> Option<ParsedItem> {
         .content
         .as_ref()
         .and_then(|c| c.body.clone())
-        .filter(|s| !s.trim().is_empty());
+        .filter(|s| !s.trim().is_empty())
+        // Many RSS 2.0 feeds ship the whole article as HTML in `<description>`.
+        .or_else(|| {
+            entry
+                .summary
+                .as_ref()
+                .map(|t| t.content.clone())
+                .filter(|s| has_block_markup(s))
+        });
     let summary_src = entry
         .summary
         .as_ref()
@@ -167,6 +175,34 @@ fn parse_entry(entry: Entry) -> Option<ParsedItem> {
         summary_text,
         content_html,
         paper_url,
+    })
+}
+
+const BLOCK_TAGS: &[&str] = &[
+    "<p",
+    "<br",
+    "<div",
+    "<img",
+    "<li",
+    "<h1",
+    "<h2",
+    "<h3",
+    "<h4",
+    "<blockquote",
+    "<table",
+    "<pre",
+    "<figure",
+];
+
+fn has_block_markup(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    BLOCK_TAGS.iter().any(|tag| {
+        lower.match_indices(tag).any(|(i, _)| {
+            lower[i + tag.len()..]
+                .chars()
+                .next()
+                .is_some_and(|c| c == '>' || c == '/' || c.is_ascii_whitespace())
+        })
     })
 }
 
@@ -601,5 +637,20 @@ mod tests {
             parsed.items[0].paper_url.as_deref(),
             Some("https://arxiv.org/abs/1706.03762")
         );
+    }
+
+    #[test]
+    fn html_description_becomes_content() {
+        let xml = r#"<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>
+<item><title>a</title><link>https://e.x/a</link><description>&lt;p&gt;One.&lt;/p&gt;&lt;p&gt;Two.&lt;/p&gt;</description></item>
+<item><title>b</title><link>https://e.x/b</link><description>Plain text only.</description></item>
+</channel></rss>"#;
+        let feed = parse_feed_bytes(xml.as_bytes(), "x").unwrap();
+        assert_eq!(
+            feed.items[0].content_html.as_deref(),
+            Some("<p>One.</p><p>Two.</p>")
+        );
+        assert_eq!(feed.items[0].summary_text, "One. Two.");
+        assert_eq!(feed.items[1].content_html, None);
     }
 }
