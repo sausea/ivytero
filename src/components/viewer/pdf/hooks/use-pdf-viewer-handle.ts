@@ -41,6 +41,7 @@ import {
 } from "@/lib/pdf/highlight/annotation-store";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import { setFocusedLayoutRegion } from "@/lib/pdf/layout";
+import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { planVisualTraceJump } from "@/lib/pdf/visual-trace-jump";
 import { writeVaultBytes } from "@/lib/vault/fs";
 
@@ -76,6 +77,7 @@ export type UsePdfViewerHandleOptions = {
 	highlightsRef: RefObject<PdfHighlight[]>;
 	threadsRef: RefObject<PdfAskThread[]>;
 	visualTracesRef: RefObject<PdfVisualSessionTrace[]>;
+	translatesRef: RefObject<PdfTranslateRecord[]>;
 	setThreads: Dispatch<SetStateAction<PdfAskThread[]>>;
 	/** Layout cluster; owned by {@link usePdfLayoutRun}. */
 	layoutTaskRef: RefObject<LayoutAnalysisTask | null>;
@@ -84,6 +86,8 @@ export type UsePdfViewerHandleOptions = {
 	>;
 	openEditorForAnnotation: (id: string) => void;
 	openThread: (thread: PdfAskThread) => void;
+	/** Reopen a pinned translation card (anchors after page mount). */
+	openTranslateCard: (id: string) => void;
 	deleteVisualTraceById: (id: string) => void;
 	/** Highlight deletion coordinated with any in-flight commit for the same uid. */
 	deleteHighlightAnnotation: (pageIndex: number, id: string) => void;
@@ -105,11 +109,13 @@ export function usePdfViewerHandle({
 	highlightsRef,
 	threadsRef,
 	visualTracesRef,
+	translatesRef,
 	setThreads,
 	layoutTaskRef,
 	startLayoutAnalysisRef,
 	openEditorForAnnotation,
 	openThread,
+	openTranslateCard,
 	deleteVisualTraceById,
 	deleteHighlightAnnotation,
 	toggleElementSelection,
@@ -203,6 +209,15 @@ export function usePdfViewerHandle({
 			},
 			deleteVisualTrace: (id) => {
 				deleteVisualTraceById(id);
+			},
+			scrollToTranslate: (id) => {
+				const record = translatesRef.current.find((item) => item.id === id);
+				if (!record) return;
+				scrollRef.current?.scrollToPage({
+					pageNumber: record.page,
+					behavior: "instant",
+				});
+				openTranslateCard(id);
 			},
 			toggleElementSelection: () => toggleElementSelectionRef.current(),
 			toggleLayoutTranslate: () => toggleLayoutTranslateRef.current(),

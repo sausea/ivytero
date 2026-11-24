@@ -341,7 +341,9 @@
 		"addToVocabulary": "加入生词本",
 		"vocabularyAdded": "已加入生词本",
 		"vocabularyAddFailed": "加入生词本失败",
-		"vocabularyUnconfigured": "请先在设置中配置生词本接口"
+		"addToNotes": "加入笔记",
+		"addedToNotes": "已加入论文笔记",
+		"addToNotesFailed": "加入笔记失败"
 	},
 	"html": {
 		"empty": "暂无论文。",

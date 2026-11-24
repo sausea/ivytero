@@ -3,6 +3,7 @@ import {
 	Check,
 	Copy,
 	Languages,
+	NotebookPen,
 	Pin,
 	PinOff,
 	Settings2Icon,
@@ -46,6 +47,8 @@ type TranslateCardProps = {
 	pinned?: boolean;
 	/** Toggle whether the result is kept with a persistent source marker. */
 	onTogglePin?: () => void;
+	/** Append source + translation to the paper notes, linked to this mark. */
+	onAddToNotes?: () => void;
 	onBoundsChange?: (bounds: DOMRectReadOnly) => void;
 	onPointerEnter?: () => void;
 	onPointerLeave?: () => void;
@@ -70,6 +73,7 @@ export function TranslateCard({
 	onHide,
 	pinned = false,
 	onTogglePin,
+	onAddToNotes,
 	onBoundsChange,
 	onPointerEnter,
 	onPointerLeave,
@@ -77,7 +81,7 @@ export function TranslateCard({
 	mode: requestedMode,
 	onModeChange,
 }: TranslateCardProps) {
-	const { t, i18n } = useTranslation("viewer");
+	const { t } = useTranslation("viewer");
 	// A completed click elsewhere on the page dismisses the result (default).
 	// Settings → Translate can keep the card always visible instead; scrolling
 	// and page turns never close it either way (see SelectionCard's outside
@@ -85,8 +89,6 @@ export function TranslateCard({
 	const alwaysShowCard = useSettings(
 		(s) => s.translate.alwaysShowTranslateCard,
 	);
-	const vocabulary = useSettings((s) => s.vocabulary);
-	const targetLang = useSettings((s) => s.translate.targetLang);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const mode =
 		requestedMode ??
@@ -111,52 +113,20 @@ export function TranslateCard({
 
 	const addToVocabulary = useCallback(async () => {
 		const word = (sourceText ?? "").trim();
-		if (!word || vocabState === "adding" || !vaultPath) return;
-		if (
-			!vocabulary.baseUrl.trim() ||
-			!vocabulary.apiKey.trim() ||
-			!vocabulary.model.trim()
-		) {
-			notifyError(t("selection.vocabularyUnconfigured"));
-			return;
-		}
+		const entry = result.trim();
+		if (!word || !entry || vocabState === "adding" || !vaultPath) return;
 		setVocabState("adding");
 		try {
-			const resolvedLang =
-				targetLang === "ui"
-					? i18n.language.startsWith("zh")
-						? "zh-CN"
-						: "en"
-					: targetLang;
-			await callApi(
-				() =>
-					commands.vocabularyAdd({
-						vaultPath,
-						word,
-						targetLang: resolvedLang,
-						config: {
-							baseUrl: vocabulary.baseUrl,
-							apiKey: vocabulary.apiKey,
-							model: vocabulary.model,
-						},
-					}),
-				{ fallback: t("selection.vocabularyAddFailed") },
-			);
+			await callApi(() => commands.vocabularyAdd({ vaultPath, word, entry }), {
+				fallback: t("selection.vocabularyAddFailed"),
+			});
 			setVocabState("added");
 			notifySuccess(t("selection.vocabularyAdded"));
 		} catch (error) {
 			setVocabState("idle");
 			notifyError(errorText(error) || t("selection.vocabularyAddFailed"));
 		}
-	}, [
-		i18n.language,
-		sourceText,
-		t,
-		targetLang,
-		vaultPath,
-		vocabState,
-		vocabulary,
-	]);
+	}, [result, sourceText, t, vaultPath, vocabState]);
 
 	// 根据模式切换标题和 loading 文案
 	const title =
@@ -347,7 +317,10 @@ export function TranslateCard({
 							},
 						]
 					: []),
-				...(mode === "dictionary" && showResult && sourceText?.trim()
+				...(showResult &&
+				!typing &&
+				vaultPath &&
+				isDictionaryLookup(sourceText ?? "")
 					? [
 							{
 								id: "vocabulary",
@@ -364,6 +337,16 @@ export function TranslateCard({
 										<BookA className="size-3.5" />
 									),
 								pressed: vocabState === "added",
+							},
+						]
+					: []),
+				...(onAddToNotes && mode === "translate" && showResult && !typing
+					? [
+							{
+								id: "notes",
+								label: t("selection.addToNotes"),
+								onClick: onAddToNotes,
+								icon: <NotebookPen className="size-3.5" />,
 							},
 						]
 					: []),

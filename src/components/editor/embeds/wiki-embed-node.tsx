@@ -220,7 +220,8 @@ function embedChromeKind(
 	// Prefer resolved subtype once the body has loaded the mark.
 	if (annotationKind === "visual" || annotationKind === "agent-trace")
 		return "annotation-visual";
-	if (annotationKind === "highlight") return "annotation-highlight";
+	if (annotationKind === "highlight" || annotationKind === "translate")
+		return "annotation-highlight";
 
 	if (state.kind === "ready") {
 		const kind = state.response.contentKind;

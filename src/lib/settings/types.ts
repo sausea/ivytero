@@ -416,8 +416,6 @@ export type AppSettings = {
 	layout: LayoutSettings;
 	/** OpenAI-compatible endpoint for RSS bookmark AI analysis. All-empty = disabled. */
 	rssAnalysis: RssAnalysisSettings;
-	/** OpenAI-compatible endpoint for the vocabulary notebook dictionary lookup. All-empty = disabled. */
-	vocabulary: VocabularySettings;
 	/**
 	 * Config reminders dismissed with "don't remind me again". Ids come from
 	 * {@link CONFIG_REMINDER_IDS}; unknown values are dropped on normalize.
@@ -511,14 +509,6 @@ export type EmbeddingSource = "builtin" | "custom";
 
 /** RSS bookmark AI analysis endpoint (BYOK, OpenAI-compatible). All-empty = disabled. */
 export type RssAnalysisSettings = {
-	/** Endpoint base, e.g. `https://api.openai.com/v1`. */
-	baseUrl: string;
-	apiKey: string;
-	model: string;
-};
-
-/** Vocabulary notebook dictionary endpoint (BYOK, OpenAI-compatible). All-empty = disabled. */
-export type VocabularySettings = {
 	/** Endpoint base, e.g. `https://api.openai.com/v1`. */
 	baseUrl: string;
 	apiKey: string;

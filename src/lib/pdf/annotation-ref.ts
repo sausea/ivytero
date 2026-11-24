@@ -35,12 +35,17 @@ import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import type { PdfTextMarkupKind } from "@/lib/pdf/highlight/types";
 import { normalizeSentenceKey } from "@/lib/pdf/layout/layout-sentences";
 import { readMarkRaw } from "@/lib/pdf/selection/marks-io";
+import { parsePdfTranslateRecord } from "@/lib/pdf/translate/schema";
 import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { joinVaultPath } from "@/lib/vault";
 import { formatWikiLinkBody } from "@/lib/wiki/api";
 import { findCanonicalTab } from "@/lib/workspace/tabs/model";
 
-export type AnnotationRefKind = "highlight" | "visual" | "agent-trace";
+export type AnnotationRefKind =
+	| "highlight"
+	| "visual"
+	| "agent-trace"
+	| "translate";
 
 export type AnnotationRefRect = {
 	/** 0–1 relative to page box (top-down when from app marks). */
@@ -283,6 +288,20 @@ export async function lookupAnnotationRef(
 			...(image ? { image } : {}),
 			rects: rectsFromVisual(trace.rects),
 			...(messages.length ? { messages } : {}),
+		};
+	}
+
+	// Pinned selection translation (`marks/<id>.json`, kind translate).
+	const translated = parsePdfTranslateRecord(raw);
+	if (translated && translated.id === id) {
+		return {
+			kind: "translate",
+			id,
+			paperAbsPath,
+			page: translated.page,
+			quote: translated.quote ?? "",
+			comment: translated.result ?? "",
+			rects: translated.rects,
 		};
 	}
 

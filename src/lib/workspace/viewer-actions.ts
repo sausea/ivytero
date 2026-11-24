@@ -1201,6 +1201,8 @@ function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 			}
 			if (ref.kind === "visual" || ref.kind === "agent-trace") {
 				handle.scrollToVisualTrace(ref.id);
+			} else if (ref.kind === "translate") {
+				handle.scrollToTranslate(ref.id);
 			} else {
 				handle.scrollToHighlight(ref.id);
 			}

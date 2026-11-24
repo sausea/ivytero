@@ -84,6 +84,8 @@ type PdfCardStackProps = {
 		error: string | null;
 		onOpenSettings: () => void;
 		onTogglePin?: () => void;
+		/** Append source + translation to NOTES.md with a link back. */
+		onAddToNotes?: () => void;
 		onHide: () => void;
 	};
 	visual: {
@@ -234,6 +236,7 @@ export const PdfCardStack = memo(function PdfCardStack({
 						error={translate.error ?? translate.record.error ?? null}
 						pinned={translate.record.pinned}
 						onTogglePin={translate.onTogglePin}
+						onAddToNotes={translate.onAddToNotes}
 						onOpenSettings={translate.onOpenSettings}
 						onHide={translate.onHide}
 						onBoundsChange={

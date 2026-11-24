@@ -31,6 +31,8 @@ export type PdfViewerHandle = {
 	deleteAsk: (id: string) => void;
 	/** Jump to a visual agent-trace pin and open its preview card. */
 	scrollToVisualTrace: (id: string) => void;
+	/** Jump to a pinned selection translation and reopen its card. */
+	scrollToTranslate: (id: string) => void;
 	deleteVisualTrace: (id: string) => void;
 	/** Toggle layout element selection (⌘.). */
 	toggleElementSelection: () => void;

@@ -35,7 +35,6 @@ import {
 	DEFAULT_PDF_ASK_SETTINGS,
 	DEFAULT_RSS_ANALYSIS_SETTINGS,
 	DEFAULT_SETTINGS,
-	DEFAULT_VOCABULARY_SETTINGS,
 	SMART_HIGHLIGHT_CONCURRENCY_CHOICES,
 	SMART_HIGHLIGHT_TIMEOUT_MAX_SECS,
 	SMART_HIGHLIGHT_TIMEOUT_MIN_SECS,
@@ -61,7 +60,6 @@ import {
 	type PaperReaderSettings,
 	type PdfAskSettings,
 	type RssAnalysisSettings,
-	type VocabularySettings,
 } from "@/lib/settings/types";
 import {
 	DEFAULT_TRANSLATE_SETTINGS,
@@ -124,7 +122,6 @@ function cloneSettings(s: AppSettings): AppSettings {
 		translate: { ...s.translate },
 		layout: { ...s.layout, providerConfigs: { ...s.layout.providerConfigs } },
 		rssAnalysis: { ...s.rssAnalysis },
-		vocabulary: { ...s.vocabulary },
 		dismissedReminders: [...s.dismissedReminders],
 		decision: { ...s.decision },
 	};
@@ -598,9 +595,6 @@ function normalizePartial(
 	merged.rssAnalysis = normalizeRssAnalysisSettings(
 		(parsed as { rssAnalysis?: Partial<RssAnalysisSettings> }).rssAnalysis,
 	);
-	merged.vocabulary = normalizeVocabularySettings(
-		(parsed as { vocabulary?: Partial<VocabularySettings> }).vocabulary,
-	);
 	// Legacy key `jev` → `decision` (pre-provider-selection storage).
 	merged.decision = normalizeDecisionSettings(
 		(parsed as { decision?: Partial<DecisionSettings> }).decision ??
@@ -782,17 +776,6 @@ function normalizeRssAnalysisSettings(
 	raw: Partial<RssAnalysisSettings> | undefined,
 ): RssAnalysisSettings {
 	const base = { ...DEFAULT_RSS_ANALYSIS_SETTINGS };
-	if (!raw || typeof raw !== "object") return base;
-	if (typeof raw.baseUrl === "string") base.baseUrl = raw.baseUrl.trim();
-	if (typeof raw.apiKey === "string") base.apiKey = raw.apiKey.trim();
-	if (typeof raw.model === "string") base.model = raw.model.trim();
-	return base;
-}
-
-function normalizeVocabularySettings(
-	raw: Partial<VocabularySettings> | undefined,
-): VocabularySettings {
-	const base = { ...DEFAULT_VOCABULARY_SETTINGS };
 	if (!raw || typeof raw !== "object") return base;
 	if (typeof raw.baseUrl === "string") base.baseUrl = raw.baseUrl.trim();
 	if (typeof raw.apiKey === "string") base.apiKey = raw.apiKey.trim();

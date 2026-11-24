@@ -164,11 +164,11 @@ import {
 } from "@/lib/agent/selection-store";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { markOnce } from "@/lib/core/perf";
 import { cn } from "@/lib/core/utils";
-import { isPdfViewerSource } from "@/lib/paper";
+import { isPdfViewerSource, notesPathForPaper } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import { lookupSubmit } from "@/lib/paper/import-actions";
 import {
@@ -232,6 +232,7 @@ import { PDF_ZOOM_MAX, PDF_ZOOM_MIN } from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
 import type { MenuContext } from "@/lib/shell/commands/menu-contributions";
 import { layout } from "@/lib/shell/ui-store";
+import { readVaultFile, writeVaultFile } from "@/lib/vault/fs";
 import { normalizePathKey, vaultRelativePath } from "@/lib/vault/path";
 import { workspaceStore } from "@/lib/workspace/store";
 
@@ -2411,6 +2412,11 @@ function PdfViewerInner({
 		rePlaceFloatingOnScroll,
 	]);
 
+	const openTranslateCard = useCallback(
+		(id: string) => openCard({ kind: "translate", id }),
+		[openCard],
+	);
+
 	usePdfViewerHandle({
 		docId,
 		goToRegion,
@@ -2424,11 +2430,13 @@ function PdfViewerInner({
 		highlightsRef,
 		threadsRef,
 		visualTracesRef,
+		translatesRef,
 		setThreads,
 		layoutTaskRef,
 		startLayoutAnalysisRef,
 		openEditorForAnnotation,
 		openThread,
+		openTranslateCard,
 		deleteVisualTraceById,
 		deleteHighlightAnnotation,
 		toggleElementSelection,
@@ -2956,6 +2964,48 @@ function PdfViewerInner({
 		if (activeTranslate) toggleTranslatePin(activeTranslate);
 	}, [activeTranslate, toggleTranslatePin]);
 
+	/**
+	 * Append the source paragraph and its translation to the paper's NOTES.md
+	 * with a `[[@id]]` link back. Pinning keeps the mark the link resolves to.
+	 */
+	const handleAddTranslateToNotes = useCallback(async () => {
+		const record = activeTranslate;
+		const quote = record?.quote?.trim();
+		const translated = record?.result?.trim();
+		if (!record || !quote || !translated || !paperAbsPath) return;
+		const notesPath = notesPathForPaper(paperAbsPath);
+		try {
+			const doc = await readVaultFile(notesPath).catch(() => "");
+			if (!doc.includes(`@${record.id}`)) {
+				if (!record.pinned) toggleTranslatePin(record);
+				const link = annotationWikilinkMarkdown({
+					target: "",
+					id: record.id,
+					sameNote: true,
+					alias: `p.${record.page}`,
+				});
+				const block = [
+					quote
+						.split(/\r?\n/)
+						.map((line) => `> ${line}`)
+						.join("\n"),
+					"",
+					translated,
+					"",
+					link,
+				].join("\n");
+				const head = doc.replace(/\s+$/, "");
+				await writeVaultFile(
+					notesPath,
+					`${head ? `${head}\n\n` : ""}${block}\n`,
+				);
+			}
+			notifySuccess(t("selection.addedToNotes"));
+		} catch (error) {
+			notifyError(errorText(error) || t("selection.addToNotesFailed"));
+		}
+	}, [activeTranslate, paperAbsPath, toggleTranslatePin, t]);
+
 	const handleTranslateModeChange = useCallback(
 		(mode: "dictionary" | "translate") => {
 			if (activeTranslate?.quote)
@@ -2985,6 +3035,10 @@ function PdfViewerInner({
 				paperAbsPath && activeTranslate?.rects.length
 					? handleToggleTranslatePin
 					: undefined,
+			onAddToNotes:
+				paperAbsPath && activeTranslate?.rects.length
+					? handleAddTranslateToNotes
+					: undefined,
 			onHide: hideActiveCard,
 		}),
 		[
@@ -2995,6 +3049,7 @@ function PdfViewerInner({
 			openTranslateSettings,
 			paperAbsPath,
 			handleToggleTranslatePin,
+			handleAddTranslateToNotes,
 			handleTranslateModeChange,
 			hideActiveCard,
 		],

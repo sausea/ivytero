@@ -181,27 +181,16 @@ pub async fn translate_text(
 pub struct VocabularyAddArgs {
     pub vault_path: String,
     pub word: String,
-    #[serde(default)]
-    pub context: Option<String>,
-    pub target_lang: String,
-    pub config: agentero_core::features::vocabulary::VocabularyConfig,
+    /// Dictionary entry Markdown already shown in the selection-translate card.
+    pub entry: String,
 }
 
-/// Look up a selected word through the configured dictionary endpoint and
-/// upsert it into the Vault vocabulary notebook (`notes/生词本.md`).
-/// Returns the entry Markdown that was written.
+/// Upsert a selected word and its dictionary entry into the Vault vocabulary
+/// notebook (`notes/生词本.md`). Returns the entry Markdown that was written.
 #[tauri::command]
 #[specta::specta]
 pub async fn vocabulary_add(args: VocabularyAddArgs) -> ApiResult<String> {
-    match agentero_core::features::vocabulary::add_word(
-        &args.vault_path,
-        &args.word,
-        args.context.as_deref(),
-        &args.target_lang,
-        &args.config,
-    )
-    .await
-    {
+    match agentero_core::features::vocabulary::add_word(&args.vault_path, &args.word, &args.entry) {
         Ok(entry) => ApiResult::ok(entry),
         Err(e) => map_err(e),
     }

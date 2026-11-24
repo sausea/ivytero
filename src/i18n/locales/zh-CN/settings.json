@@ -1287,12 +1287,5 @@
 		"baseUrlHint": "OpenAI 兼容 API 根地址，如 https://api.openai.com/v1",
 		"apiKey": "API Key",
 		"model": "模型"
-	},
-	"vocabulary": {
-		"section": "生词本",
-		"baseUrl": "接口地址",
-		"baseUrlHint": "用于词典查询的 OpenAI 兼容 API 根地址，如 https://api.openai.com/v1",
-		"apiKey": "API Key",
-		"model": "模型"
 	}
 }

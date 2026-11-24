@@ -1287,12 +1287,5 @@
 		"baseUrlHint": "OpenAI-compatible API root, e.g. https://api.openai.com/v1",
 		"apiKey": "API Key",
 		"model": "Model"
-	},
-	"vocabulary": {
-		"section": "Vocabulary notebook",
-		"baseUrl": "Base URL",
-		"baseUrlHint": "OpenAI-compatible API root for dictionary lookup, e.g. https://api.openai.com/v1",
-		"apiKey": "API Key",
-		"model": "Model"
 	}
 }

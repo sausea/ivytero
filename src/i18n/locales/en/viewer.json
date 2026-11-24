@@ -343,7 +343,9 @@
 		"addToVocabulary": "Add to vocabulary",
 		"vocabularyAdded": "Added to vocabulary notebook",
 		"vocabularyAddFailed": "Could not add to the vocabulary notebook",
-		"vocabularyUnconfigured": "Configure the vocabulary endpoint in Settings first"
+		"addToNotes": "Add to notes",
+		"addedToNotes": "Added to paper notes",
+		"addToNotesFailed": "Could not add to notes"
 	},
 	"html": {
 		"empty": "No paper available.",
