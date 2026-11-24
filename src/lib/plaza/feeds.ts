@@ -17,7 +17,13 @@ import { lookupSubmit } from "@/lib/paper/import-actions";
 /** Wire shapes from the generated bindings (feeds.sqlite rows). */
 export type { FeedItem, FeedSub };
 
-export type FeedFilter = "all" | "paper" | "other" | "unread";
+export type FeedFilter =
+	| "all"
+	| "paper"
+	| "other"
+	| "unread"
+	/** Unread when this client run started; items read since stay listed. */
+	| "unread_session";
 
 export const ARXIV_FEED_CHIPS = [
 	"cs.AI",

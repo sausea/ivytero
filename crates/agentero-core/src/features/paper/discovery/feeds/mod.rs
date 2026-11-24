@@ -115,6 +115,14 @@ fn now_rfc3339() -> String {
     crate::time::now_rfc3339_millis()
 }
 
+/// When this client run first touched feeds. "Hide read" lists skip only
+/// items read before it, so items read during this run stay listed until
+/// the next launch.
+pub fn session_started_at() -> &'static str {
+    static AT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    AT.get_or_init(now_rfc3339)
+}
+
 fn http_client() -> Result<reqwest::Client, AppError> {
     http::client(Duration::from_secs(FETCH_TIMEOUT_SECS))
 }
@@ -507,6 +515,10 @@ fn query_items(
     }
     match filter {
         "unread" => sql.push_str(" AND i.read_at IS NULL"),
+        "unread_session" => {
+            sql.push_str(" AND (i.read_at IS NULL OR i.read_at >= ?)");
+            binds.push(session_started_at().to_string().into());
+        }
         "paper" => sql.push_str(" AND i.paper_url IS NOT NULL AND i.paper_url != ''"),
         "other" => sql.push_str(" AND (i.paper_url IS NULL OR i.paper_url = '')"),
         _ => {}
@@ -578,6 +590,7 @@ pub fn mark_imported(id: &str) -> Result<FeedItem, AppError> {
 
 /// Mark every unread item read, in one subscription or in all of them.
 pub fn mark_all_read(subscription_id: Option<&str>) -> Result<Vec<FeedSub>, AppError> {
+    session_started_at();
     let conn = ensure_feeds()?;
     conn.execute(
         "UPDATE items SET read_at = ?1
@@ -588,6 +601,7 @@ pub fn mark_all_read(subscription_id: Option<&str>) -> Result<Vec<FeedSub>, AppE
 }
 
 pub fn set_read(id: &str, read: bool) -> Result<FeedItem, AppError> {
+    session_started_at();
     let conn = ensure_feeds()?;
     set_read_at(&conn, id, read)
 }
@@ -804,6 +818,7 @@ pub fn items(
     before_published_at: Option<&str>,
     before_id: Option<&str>,
 ) -> Result<FeedItemsPage, AppError> {
+    session_started_at();
     let conn = ensure_feeds()?;
     Ok(FeedItemsPage {
         items: query_items(

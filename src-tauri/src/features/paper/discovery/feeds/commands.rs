@@ -233,7 +233,7 @@ pub struct FeedsCloudItemsArgs {
     pub cursor: Option<String>,
     #[serde(default)]
     pub limit: Option<u32>,
-    /// Skip articles this device has read.
+    /// Skip articles this device had read before this client run started.
     #[serde(default)]
     pub unread_only: bool,
 }

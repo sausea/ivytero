@@ -118,6 +118,22 @@ pub fn unread_scan_since(
         .unwrap_or_else(|_| since.to_string()))
 }
 
+/// Whether "hide read" keeps an article listed: it was unread when this
+/// client run started (`session_since` watermark, `session_start` time),
+/// even if it has been read since.
+pub fn listed_when_hiding_read(
+    session_since: &str,
+    session_start: &str,
+    first_seen_at: &str,
+    mark: Option<&(bool, String)>,
+) -> bool {
+    match mark {
+        Some((true, at)) => at.as_str() >= session_start,
+        Some((false, _)) => true,
+        None => first_seen_at > session_since,
+    }
+}
+
 /// `read_at` shown for an article: the mark time, the watermark, or unread.
 pub fn read_at(since: &str, first_seen_at: &str, mark: Option<&(bool, String)>) -> Option<String> {
     match mark {

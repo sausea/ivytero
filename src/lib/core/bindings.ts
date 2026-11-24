@@ -3429,7 +3429,7 @@ export type FeedsCloudItemsArgs = {
 	feedId?: string | null,
 	cursor?: string | null,
 	limit?: number | null,
-	/**  Skip articles this device has read. */
+	/**  Skip articles this device had read before this client run started. */
 	unreadOnly?: boolean,
 };
 

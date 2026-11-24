@@ -12,7 +12,9 @@ use super::{FeedItem, FeedSub};
 use crate::error::AppError;
 use crate::{http, paths};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use url::Url;
 
@@ -349,13 +351,29 @@ fn to_item(article: WireArticle, with_body: bool) -> FeedItem {
 
 /// This device's read watermark for the archive, seeded from its clock once.
 async fn read_scope(base: &str, token: &str) -> Result<(String, String), AppError> {
+    super::session_started_at();
     let server_id = server_id().await?;
     if let Some(since) = cloud_reads::unread_since(&cloud_reads::open()?, &server_id)? {
+        session_since(&server_id, &since);
         return Ok((server_id, since));
     }
     let now = archive_now(base, token).await?;
     cloud_reads::advance(&mut cloud_reads::open()?, &server_id, &now)?;
+    session_since(&server_id, &now);
     Ok((server_id, now))
+}
+
+/// The server's read watermark as first seen in this client run; later
+/// "mark all read" moves the stored one but not this.
+fn session_since(server_id: &str, since: &str) -> String {
+    static SEEN: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    let mut seen = SEEN
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    seen.entry(server_id.to_string())
+        .or_insert_with(|| since.to_string())
+        .clone()
 }
 
 async fn archive_now(base: &str, token: &str) -> Result<String, AppError> {
@@ -428,11 +446,12 @@ pub async fn items(
     if let Some(id) = feed_id.filter(|s| !s.is_empty()) {
         query.push(("feedId", id.to_string()));
     }
+    let session_since = session_since(&server_id, &since);
     if unread_only {
         let scan_since = cloud_reads::unread_scan_since(
             &cloud_reads::open()?,
             &server_id,
-            &since,
+            &session_since,
             feed_id.filter(|s| !s.is_empty()),
         )?;
         query.push(("newSince", scan_since));
@@ -444,10 +463,24 @@ pub async fn items(
             q.push(("cursor", c.clone()));
         }
         let page: WireArticlePage = get_json(&base, &token, "/articles", &q).await?;
-        let mut items = with_read_state(&server_id, &since, page.items, false)?;
-        if unread_only {
-            items.retain(|i| i.read_at.is_none());
-        }
+        let articles = if unread_only {
+            let ids: Vec<&str> = page.items.iter().map(|a| a.id.as_str()).collect();
+            let marks = cloud_reads::marks(&cloud_reads::open()?, &server_id, &ids)?;
+            page.items
+                .into_iter()
+                .filter(|a| {
+                    cloud_reads::listed_when_hiding_read(
+                        &session_since,
+                        super::session_started_at(),
+                        &a.first_seen_at,
+                        marks.get(&a.id),
+                    )
+                })
+                .collect()
+        } else {
+            page.items
+        };
+        let items = with_read_state(&server_id, &since, articles, false)?;
         cursor = page.next_cursor;
         if !items.is_empty() || cursor.is_none() || !unread_only {
             return Ok(CloudFeedItemsPage {

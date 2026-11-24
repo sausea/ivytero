@@ -585,7 +585,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 				setHasMore(false);
 				const rows = await feedsItems({
 					subscriptionId: subscriptionId ?? undefined,
-					filter: hideReadRef.current ? "unread" : "all",
+					filter: hideReadRef.current ? "unread_session" : "all",
 				});
 				if (request === itemsRequest.current) setItems(rows);
 			} catch (error) {
@@ -1017,16 +1017,8 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 		[source, t],
 	);
 
-	const openItemId = openItem?.id ?? null;
-	const visibleItems = useMemo(
-		() =>
-			hideRead
-				? items.filter((item) => !item.readAt || item.id === openItemId)
-				: items,
-		[hideRead, items, openItemId],
-	);
 	const virtualizer = useVirtualizer({
-		count: visibleItems.length,
+		count: items.length,
 		getScrollElement: () => listRef.current,
 		estimateSize: () => 92,
 		overscan: 8,
@@ -1035,10 +1027,10 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const virtualRows = virtualizer.getVirtualItems();
 	const lastVirtualIndex = virtualRows[virtualRows.length - 1]?.index ?? -1;
 	useEffect(() => {
-		if (hasMore && lastVirtualIndex >= visibleItems.length - 8) {
+		if (hasMore && lastVirtualIndex >= items.length - 8) {
 			void loadMore();
 		}
-	}, [hasMore, lastVirtualIndex, loadMore, visibleItems.length]);
+	}, [hasMore, lastVirtualIndex, loadMore, items.length]);
 
 	const cloudButton = (
 		<Tooltip>
@@ -1065,7 +1057,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 	const selected = selectedId
 		? (subs.find((row) => row.id === selectedId) ?? null)
 		: null;
-	const emptyItems = !loading && visibleItems.length === 0;
+	const emptyItems = !loading && items.length === 0;
 	const subGroups = useMemo(() => groupFeedSubs(subs), [subs]);
 	const showFolders = subGroups.some((group) => group.folder !== "");
 	const totalUnread = subs.some((row) => row.unreadCount !== null)
@@ -1395,7 +1387,7 @@ export function PlazaFeedsView({ className }: { className?: string }) {
 											style={{ height: virtualizer.getTotalSize() }}
 										>
 											{virtualRows.map((virtualRow) => {
-												const item = visibleItems[virtualRow.index];
+												const item = items[virtualRow.index];
 												return (
 													<div
 														key={item.id}
