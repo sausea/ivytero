@@ -134,6 +134,9 @@ export function usePdfViewerHandle({
 	toggleElementSelectionRef.current = toggleElementSelection;
 	const defaultExportNameRef = useRef(defaultExportName);
 	defaultExportNameRef.current = defaultExportName;
+	// The handle registers once; openCard's active gate changes with focus.
+	const openTranslateCardRef = useRef(openTranslateCard);
+	openTranslateCardRef.current = openTranslateCard;
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the injected refs and setters are stable identities; depending on them would re-register the handle on every mark change.
 	useEffect(() => {
@@ -217,7 +220,7 @@ export function usePdfViewerHandle({
 					pageNumber: record.page,
 					behavior: "instant",
 				});
-				openTranslateCard(id);
+				openTranslateCardRef.current(id);
 			},
 			toggleElementSelection: () => toggleElementSelectionRef.current(),
 			toggleLayoutTranslate: () => toggleLayoutTranslateRef.current(),

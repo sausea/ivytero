@@ -1202,6 +1202,8 @@ function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 			if (ref.kind === "visual" || ref.kind === "agent-trace") {
 				handle.scrollToVisualTrace(ref.id);
 			} else if (ref.kind === "translate") {
+				// Focus the PDF so its translate card may open (NOTES had the click).
+				if (tabId) dockHandle()?.activatePanel(tabId);
 				handle.scrollToTranslate(ref.id);
 			} else {
 				handle.scrollToHighlight(ref.id);

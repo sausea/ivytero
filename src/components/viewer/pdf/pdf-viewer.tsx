@@ -2412,10 +2412,28 @@ function PdfViewerInner({
 		rePlaceFloatingOnScroll,
 	]);
 
+	// Wikilink jumps arrive while NOTES still owns focus; translate cards only
+	// open in the active viewer, so defer until this PDF becomes active.
+	const pendingTranslateIdRef = useRef<string | null>(null);
+	const isActiveRef = useRef(isActive);
+	isActiveRef.current = isActive;
 	const openTranslateCard = useCallback(
-		(id: string) => openCard({ kind: "translate", id }),
+		(id: string) => {
+			if (isActiveRef.current) {
+				pendingTranslateIdRef.current = null;
+				openCard({ kind: "translate", id });
+			} else {
+				pendingTranslateIdRef.current = id;
+			}
+		},
 		[openCard],
 	);
+	useEffect(() => {
+		const id = pendingTranslateIdRef.current;
+		if (!isActive || !id) return;
+		pendingTranslateIdRef.current = null;
+		openCard({ kind: "translate", id });
+	}, [isActive, openCard]);
 
 	usePdfViewerHandle({
 		docId,
