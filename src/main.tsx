@@ -7,8 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { errorText } from "@/lib/core/error";
 import { initLogger, logger } from "@/lib/core/logger";
-import { notifyError, notifyReminder } from "@/lib/core/notify";
-import { openExternalUrl } from "@/lib/core/open-external";
+import { notifyError } from "@/lib/core/notify";
 import { initPaintOptimizations } from "@/lib/core/paint-perf";
 import { perfActive, perfEmit } from "@/lib/core/perf";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
@@ -24,11 +23,6 @@ import { initSettingsStore } from "@/lib/settings/react-store";
 import { applyNativeWindowTheme } from "@/lib/shell/native-window-theme";
 import { initShellLayoutFromPrefs } from "@/lib/shell/ui-store";
 import { applyUiTheme } from "@/lib/ui/theme";
-import {
-	checkForUpdate,
-	getUpdateReleaseUrl,
-	installAvailableUpdate,
-} from "@/lib/update";
 import { initVaultStore } from "@/lib/vault/store";
 import { initWorkspaceStore } from "@/lib/workspace/store";
 import i18n, { applyLocale } from "./i18n";
@@ -262,42 +256,10 @@ async function boot() {
 	);
 	perfEmit("frontend_boot", bootElapsed() * 1000, true, "window=main");
 	if (perfActive()) return;
-	void checkForStartupUpdate();
 	// Install the same-version CLI, or re-align it after a GUI-only update.
 	void syncCliAtStartup();
 	// Layout model download is a Host background task; App mounts
 	// `useLayoutModelPrefetch` to surface it in the tasks panel.
-}
-
-/** A single main window owns the background update notification. */
-async function checkForStartupUpdate(): Promise<void> {
-	if (!isTauri()) return;
-	try {
-		const { getCurrentWindow } = await import("@tauri-apps/api/window");
-		if (getCurrentWindow().label !== "main") return;
-		const update = await checkForUpdate({ retryOnTimeout: true });
-		if (update.phase !== "available" || !update.availableVersion) return;
-		notifyReminder(
-			i18n.t("settings:about.update.toastTitle", {
-				version: update.availableVersion,
-			}),
-			{
-				id: "app-update-available",
-				description: i18n.t("settings:about.update.toastDescription"),
-				dismissLabel: i18n.t("settings:about.update.releaseNotes"),
-				onDismiss: () =>
-					openExternalUrl(getUpdateReleaseUrl(update.availableVersion)),
-				actionLabel: i18n.t("settings:about.update.downloadInstall"),
-				onAction: () => {
-					void installAvailableUpdate();
-				},
-			},
-		);
-	} catch (error) {
-		logger.warn("op end updater_startup_check ok=false", {
-			error: errorText(error),
-		});
-	}
 }
 
 /**
